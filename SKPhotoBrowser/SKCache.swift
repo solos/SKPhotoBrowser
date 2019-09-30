@@ -48,13 +48,17 @@ open class SKCache {
         cache.removeAllImages()
     }
 
-    open func imageForRequest(_ request: URLRequest) -> UIImage? {
-        guard let cache = imageCache as? SKRequestResponseCacheable else {
-            return nil
-        }
-        
+ open func imageForRequest(_ request: URLRequest) -> UIImage? {
+    guard let cache = imageCache as? SKRequestResponseCacheable else {
+    return nil
+    }
+
         if let response = cache.cachedResponseForRequest(request) {
-            return UIImage(data: response.data)
+            if request.url?.absoluteString.lowercased().hasSuffix(".gif") == true {
+                return UIImage.gif(data: response.data)
+            } else {
+                return UIImage(data: response.data)
+            }
         }
         return nil
     }

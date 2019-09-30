@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.homepage            = "https://github.com/suzuki-0000/SKPhotoBrowser"
   s.license             = { :type => "MIT", :file => "LICENSE" }
   s.author              = { "suzuki_keishi" => "keishi.1983@gmail.com" }
-  s.source              = { :git => "https://github.com/suzuki-0000/SKPhotoBrowser.git", :tag => s.version }
+  s.source              = { :git => "https://github.com/solos/SKPhotoBrowser.git", :tag => s.version }
   s.platform            = :ios, "8.0"
   s.source_files        = "SKPhotoBrowser/**/*.{h,swift}"
   s.resources           = "SKPhotoBrowser/SKPhotoBrowser.bundle"
