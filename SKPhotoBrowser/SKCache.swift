@@ -31,7 +31,16 @@ open class SKCache {
         
         cache.setImage(image, forKey: key)
     }
-
+    
+    
+    open func setData(_ imageData: Data, forKey key: String) {
+          guard let cache = imageCache as? SKImageCacheable else {
+              return
+          }
+          
+          cache.setData(imageData, forKey: key)
+      }
+    
     open func removeImageForKey(_ key: String) {
         guard let cache = imageCache as? SKImageCacheable else {
             return
@@ -86,7 +95,17 @@ class SKDefaultImageCache: SKImageCacheable {
     func setImage(_ image: UIImage, forKey key: String) {
         cache.setObject(image, forKey: key as AnyObject)
     }
-
+    
+    func setData(_ imageData: Data, forKey key: String) {
+        if key.lowercased().hasSuffix(".gif"){
+            let image = UIImage.gif(data: imageData)
+            cache.setObject(image!, forKey: key as AnyObject)
+        } else {
+            let image = UIImage.init(data: imageData)
+            cache.setObject(image!, forKey: key as AnyObject)
+        }
+    }
+    
     func removeImageForKey(_ key: String) {
         cache.removeObject(forKey: key as AnyObject)
     }

@@ -88,7 +88,12 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
                         if SKCache.sharedCache.imageCache is SKRequestResponseCacheable {
                             SKCache.sharedCache.setImageData(data, response: response, request: task?.originalRequest)
                         } else {
-                            SKCache.sharedCache.setImage(image, forKey: self.photoURL)
+                            if self.photoURL.lowercased().hasSuffix(".gif"){
+                                
+                                SKCache.sharedCache.setData(data, forKey: self.photoURL)
+                            } else {
+                                SKCache.sharedCache.setImage(image, forKey: self.photoURL)
+                            }
                         }
                     }
                     DispatchQueue.main.async {

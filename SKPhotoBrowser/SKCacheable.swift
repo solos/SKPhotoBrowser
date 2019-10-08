@@ -12,6 +12,7 @@ public protocol SKCacheable {}
 public protocol SKImageCacheable: SKCacheable {
     func imageForKey(_ key: String) -> UIImage?
     func setImage(_ image: UIImage, forKey key: String)
+    func setData(_ imageData: Data, forKey key: String)
     func removeImageForKey(_ key: String)
     func removeAllImages()
 }
