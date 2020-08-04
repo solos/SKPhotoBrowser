@@ -46,17 +46,24 @@ private extension SKToolbar {
         backgroundColor = .clear
         clipsToBounds = true
         isTranslucent = true
-        setBackgroundImage(UIImage(), forToolbarPosition: .any, barMetrics: .default)
+        let color = UIColor.clear
+        UIGraphicsBeginImageContext(CGSize(width: 1, height: 1))
+        UIGraphicsGetCurrentContext()!.setFillColor(color.cgColor)
+        UIGraphicsGetCurrentContext()!.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let colorImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        setBackgroundImage(colorImage, forToolbarPosition: .any, barMetrics: .default)
     }
     
     func setupToolbar() {
         toolActionButton = UIBarButtonItem(barButtonSystemItem: .action, target: browser, action: #selector(SKPhotoBrowser.actionButtonPressed))
         toolActionButton.tintColor = UIColor.white
-        
+
         var items = [UIBarButtonItem]()
         items.append(UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: self, action: nil))
+        
         if SKPhotoBrowserOptions.displayAction {
-            items.append(toolActionButton)
+            //items.append(toolActionButton)
         }
         setItems(items, animated: false)
     }

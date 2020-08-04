@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import Photos
 
 public let SKPHOTO_LOADING_DID_END_NOTIFICATION = "photoLoadingDidEndNotification"
 
@@ -208,6 +209,8 @@ open class SKPhotoBrowser: UIViewController {
         if let panGesture = panGesture {
             view.removeGestureRecognizer(panGesture)
         }
+        let longpressGesture = UILongPressGestureRecognizer.init()
+        view.removeGestureRecognizer(longpressGesture)
         NSObject.cancelPreviousPerformRequests(withTarget: self)
     }
     
@@ -229,11 +232,13 @@ open class SKPhotoBrowser: UIViewController {
     
     open func popupShare(includeCaption: Bool = true) {
         let photo = photos[currentPageIndex]
-        guard let underlyingImage = photo.underlyingImage else {
+        
+        let image = photo.underlyingImage
+        if image == nil {
             return
         }
-        
-        var activityItems: [AnyObject] = [underlyingImage]
+
+        var activityItems: [AnyObject] = [image!]
         if photo.caption != nil && includeCaption {
             if let shareExtraCaption = SKPhotoBrowserOptions.shareExtraCaption {
                 let caption = photo.caption ?? "" + shareExtraCaption
@@ -421,6 +426,67 @@ internal extension SKPhotoBrowser {
 // MARK: - Internal Function For Button Pressed, UIGesture Control
 
 internal extension SKPhotoBrowser {
+    @objc func longpress(_ sender: UIGestureRecognizer){
+        
+        if photos.count > currentPageIndex {
+            let photo = photos[currentPageIndex]
+            
+            let alert = UIAlertController()
+
+            let save = UIAlertAction(title: "保存", style: .default, handler: {
+                [weak self] ACTION in
+                guard let self = self else { return }
+                let p = photo as? SKPhoto
+                if p != nil {
+                    let url = p!.photoURL
+                    if url != nil {
+                        if url!.lowercased().hasSuffix(".gif"){
+                            let data = SKCache.sharedCache.dataForKey(url!)
+                            
+                            PHPhotoLibrary.shared().performChanges({
+                                if #available(iOS 9, *) {
+                                    PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data!, options: nil)
+                                } else {
+                                    // Fallback on earlier versions
+                                }
+                            }) { [weak self] success, error in
+                                guard let self = self else { return }
+                                if error != nil {
+                                    print(error)
+                                }
+                            }
+                            
+                        } else {
+                            let image = SKCache.sharedCache.imageForKey(url!)
+                            UIImageWriteToSavedPhotosAlbum(image!, nil, nil, nil)
+                        }
+                    }
+                }
+
+            })
+            
+            
+            let cancle = UIAlertAction(title: "取消", style: .cancel, handler: {
+                [weak self] ACTION in
+                guard let _ = self else { return }
+            })
+            
+            //alert.addAction(copy)
+            
+            alert.addAction(save)
+            alert.addAction(cancle)
+            
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                
+                alert.popoverPresentationController?.sourceView = self.view
+                alert.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+                
+            }
+            self.present(alert, animated: true, completion: nil)
+            
+        }
+    }
+    
     @objc func panGestureRecognized(_ sender: UIPanGestureRecognizer) {
         guard let zoomingScrollView: SKZoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
             return
@@ -561,6 +627,11 @@ private extension SKPhotoBrowser {
         if let panGesture = panGesture {
             view.addGestureRecognizer(panGesture)
         }
+        
+        let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
+        longPressRecognizer.minimumPressDuration = 0.5
+        longPressRecognizer.delaysTouchesBegan = true
+        self.view.addGestureRecognizer(longPressRecognizer)
     }
     
     func configureActionView() {
