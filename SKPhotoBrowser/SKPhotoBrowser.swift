@@ -466,7 +466,7 @@ internal extension SKPhotoBrowser {
             })
             
             
-            let cancle = UIAlertAction(title: "取消", style: .cancel, handler: {
+            let cancle = UIAlertAction(title: "取消", style: .destructive, handler: {
                 [weak self] ACTION in
                 guard let _ = self else { return }
             })
