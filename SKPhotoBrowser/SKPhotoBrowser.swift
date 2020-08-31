@@ -466,6 +466,33 @@ internal extension SKPhotoBrowser {
             })
             
             
+            let share = UIAlertAction(title: "分享", style: .default) { [weak self] ACTION in
+                guard let self = self else { return }
+
+                let p = photo as? SKPhoto
+                if p != nil {
+                    let url = p!.photoURL
+                    if url != nil {
+                        if url!.lowercased().hasSuffix(".gif"){
+                            let data = SKCache.sharedCache.dataForKey(url!)
+                            
+                            let items: [Any] = [data as Any]
+                            let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+                            self.present(activityViewController, animated: true, completion: nil)
+
+                        } else {
+                            let image = SKCache.sharedCache.imageForKey(url!)
+
+                            let items: Array = [image]
+                            let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+                            self.present(activityViewController, animated: true, completion: nil)
+                        }
+                    }
+                }
+
+            }
+            
+            
             let cancle = UIAlertAction(title: "取消", style: .destructive, handler: {
                 [weak self] ACTION in
                 guard let _ = self else { return }
@@ -474,6 +501,7 @@ internal extension SKPhotoBrowser {
             //alert.addAction(copy)
             
             alert.addAction(save)
+            alert.addAction(share)
             alert.addAction(cancle)
             
             if UIDevice.current.userInterfaceIdiom == .pad {
