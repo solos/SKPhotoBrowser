@@ -30,11 +30,11 @@ open class SKPhotoBrowser: UIViewController {
     fileprivate var actionView: SKActionView!
     fileprivate(set) var paginationView: SKPaginationView!
     var toolbar: SKToolbar!
-
+    
     // actions
     fileprivate var activityViewController: UIActivityViewController!
     fileprivate var panGesture: UIPanGestureRecognizer?
-
+    
     // for status check property
     fileprivate var isEndAnimationByToolBar: Bool = true
     fileprivate var isViewActive: Bool = false
@@ -49,13 +49,13 @@ open class SKPhotoBrowser: UIViewController {
     
     // delegate
     open weak var delegate: SKPhotoBrowserDelegate?
-
+    
     // statusbar initial state
     private var statusbarHidden: Bool = UIApplication.shared.isStatusBarHidden
     
     // strings
     open var cancelTitle = "Cancel"
-
+    
     // MARK: - Initializer
     required public init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
@@ -89,7 +89,7 @@ open class SKPhotoBrowser: UIViewController {
         animator.senderOriginImage = photos[currentPageIndex].underlyingImage
         animator.senderViewForAnimation = photos[currentPageIndex] as? UIView
     }
-
+    
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
@@ -113,7 +113,7 @@ open class SKPhotoBrowser: UIViewController {
         configureActionView()
         configurePaginationView()
         configureToolbar()
-
+        
         animator.willPresent(self)
     }
     
@@ -133,22 +133,22 @@ open class SKPhotoBrowser: UIViewController {
         isPerformingLayout = true
         // where did start
         delegate?.didShowPhotoAtIndex?(self, index: currentPageIndex)
-
+        
         // toolbar
         toolbar.frame = frameForToolbarAtOrientation()
         
         // action
         actionView.updateFrame(frame: view.frame)
-
+        
         // paging
         switch SKCaptionOptions.captionLocation {
-        case .basic:
-            paginationView.updateFrame(frame: view.frame)
-        case .bottom:
-            paginationView.frame = frameForPaginationAtOrientation()
+            case .basic:
+                paginationView.updateFrame(frame: view.frame)
+            case .bottom:
+                paginationView.frame = frameForPaginationAtOrientation()
         }
         pagingScrollView.updateFrame(view.bounds, currentPageIndex: currentPageIndex)
-
+        
         isPerformingLayout = false
     }
     
@@ -193,7 +193,7 @@ open class SKPhotoBrowser: UIViewController {
     
     open func performLayout() {
         isPerformingLayout = true
-
+        
         // reset local cache
         pagingScrollView.reload()
         pagingScrollView.updateContentOffset(currentPageIndex)
@@ -237,7 +237,7 @@ open class SKPhotoBrowser: UIViewController {
         if image == nil {
             return
         }
-
+        
         var activityItems: [AnyObject] = [image!]
         if photo.caption != nil && includeCaption {
             if let shareExtraCaption = SKPhotoBrowserOptions.shareExtraCaption {
@@ -303,7 +303,7 @@ public extension SKPhotoBrowser {
                 return
             }
             isEndAnimationByToolBar = false
-
+            
             let pageFrame = frameForPageAtIndex(index)
             pagingScrollView.jumpToPageAtIndex(pageFrame)
         }
@@ -432,7 +432,7 @@ internal extension SKPhotoBrowser {
             let photo = photos[currentPageIndex]
             
             let alert = UIAlertController()
-
+            
             let save = UIAlertAction(title: "保存", style: .default, handler: {
                 [weak self] ACTION in
                 guard let self = self else { return }
@@ -462,36 +462,12 @@ internal extension SKPhotoBrowser {
                         }
                     }
                 }
-
+                
             })
             
             
-            let share = UIAlertAction(title: "分享", style: .default) { [weak self] ACTION in
-                guard let self = self else { return }
+            let share = UIAlertAction(title: "分享", style: .default, handler: self.shareHandler)
 
-                let p = photo as? SKPhoto
-                if p != nil {
-                    let url = p!.photoURL
-                    if url != nil {
-                        if url!.lowercased().hasSuffix(".gif"){
-                            let data = SKCache.sharedCache.dataForKey(url!)
-                            
-                            let items: [Any] = [data as Any]
-                            let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
-                            self.present(activityViewController, animated: true, completion: nil)
-
-                        } else {
-                            let image = SKCache.sharedCache.imageForKey(url!)
-
-                            let items: Array = [image]
-                            let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
-                            self.present(activityViewController, animated: true, completion: nil)
-                        }
-                    }
-                }
-
-            }
-            
             
             let cancle = UIAlertAction(title: "取消", style: .destructive, handler: {
                 [weak self] ACTION in
@@ -506,12 +482,60 @@ internal extension SKPhotoBrowser {
             
             if UIDevice.current.userInterfaceIdiom == .pad {
                 
+                
+                alert.modalPresentationStyle = .popover
+                //let popover: UIPopoverPresentationController! = activityViewController.popoverPresentationController
+                //popover.barButtonItem = self.toolbar.toolActionButton
+                
                 alert.popoverPresentationController?.sourceView = self.view
                 alert.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
-                
+
             }
             self.present(alert, animated: true, completion: nil)
             
+        }
+    }
+
+    func shareHandler(sender:UIAlertAction) {
+        
+        let alert = UIAlertController()
+
+        let photo = photos[currentPageIndex]
+
+        let p = photo as? SKPhoto
+        if p != nil {
+            let url = p!.photoURL
+            if url != nil {
+                if url!.lowercased().hasSuffix(".gif"){
+                    let data = SKCache.sharedCache.dataForKey(url!)
+                    
+                    let items: [Any] = [data as Any]
+                    let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+
+                    if UI_USER_INTERFACE_IDIOM() == .phone {
+                        self.present(activityViewController, animated: true, completion: nil)
+                    } else {
+                        activityViewController.popoverPresentationController?.sourceView = self.view
+
+                        self.present(activityViewController, animated: true, completion: nil)
+                    }
+                    
+                } else {
+                    let image = SKCache.sharedCache.imageForKey(url!)
+                    
+                    let items: Array = [image]
+                    let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+                    if UI_USER_INTERFACE_IDIOM() == .phone {
+                        self.present(activityViewController, animated: true, completion: nil)
+                    } else {
+                        activityViewController.popoverPresentationController?.sourceView = self.view
+                        self.present(activityViewController, animated: true, completion: nil)
+                    }
+                    
+                    
+                    
+                }
+            }
         }
     }
     
@@ -539,8 +563,8 @@ internal extension SKPhotoBrowser {
         
         let minOffset: CGFloat = viewHalfHeight / 4
         let offset: CGFloat = 1 - (zoomingScrollView.center.y > viewHalfHeight
-            ? zoomingScrollView.center.y - viewHalfHeight
-            : -(zoomingScrollView.center.y - viewHalfHeight)) / viewHalfHeight
+                                    ? zoomingScrollView.center.y - viewHalfHeight
+                                    : -(zoomingScrollView.center.y - viewHalfHeight)) / viewHalfHeight
         
         view.backgroundColor = bgColor.withAlphaComponent(max(0.7, offset))
         
@@ -556,7 +580,7 @@ internal extension SKPhotoBrowser {
                 // Continue Showing View
                 setNeedsStatusBarAppearanceUpdate()
                 view.backgroundColor = bgColor
-
+                
                 let velocityY: CGFloat = CGFloat(0.35) * sender.velocity(in: self.view).y
                 let finalX: CGFloat = firstX
                 let finalY: CGFloat = viewHalfHeight
@@ -571,7 +595,7 @@ internal extension SKPhotoBrowser {
             }
         }
     }
-   
+    
     @objc func actionButtonPressed(ignoreAndShare: Bool) {
         delegate?.willShowActionSheet?(currentPageIndex)
         
@@ -644,14 +668,14 @@ private extension SKPhotoBrowser {
         pagingScrollView.delegate = self
         view.addSubview(pagingScrollView)
     }
-
+    
     func configureGestureControl() {
         guard !SKPhotoBrowserOptions.disableVerticalSwipe else { return }
         
         panGesture = UIPanGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.panGestureRecognized(_:)))
         panGesture?.minimumNumberOfTouches = 1
         panGesture?.maximumNumberOfTouches = 1
-
+        
         if let panGesture = panGesture {
             view.addGestureRecognizer(panGesture)
         }
@@ -666,7 +690,7 @@ private extension SKPhotoBrowser {
         actionView = SKActionView(frame: view.frame, browser: self)
         view.addSubview(actionView)
     }
-
+    
     func configurePaginationView() {
         paginationView = SKPaginationView(frame: view.frame, browser: self)
         view.addSubview(paginationView)
@@ -676,14 +700,14 @@ private extension SKPhotoBrowser {
         toolbar = SKToolbar(frame: frameForToolbarAtOrientation(), browser: self)
         view.addSubview(toolbar)
     }
-
+    
     func setControlsHidden(_ hidden: Bool, animated: Bool, permanent: Bool) {
         // timer update
         cancelControlHiding()
         
         // scroll animation
         pagingScrollView.setControlsHidden(hidden: hidden)
-
+        
         // paging animation
         paginationView.setControlsHidden(hidden: hidden)
         
