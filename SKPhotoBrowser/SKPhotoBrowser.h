@@ -12,6 +12,11 @@
 #import "UIImage+animatedGIF.h"
 #endif
 
+// Live Photo support (iOS 9.1+)
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_9_1
+#import <PhotosUI/PhotosUI.h>
+#endif
+
 //! Project version number for SKPhotoBrowser.
 FOUNDATION_EXPORT double SKPhotoBrowserVersionNumber;
 

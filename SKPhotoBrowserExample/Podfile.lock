@@ -2,17 +2,24 @@ PODS:
   - SDWebImage (3.8.2):
     - SDWebImage/Core (= 3.8.2)
   - SDWebImage/Core (3.8.2)
+  - SKPhotoBrowser (7.1.0)
 
 DEPENDENCIES:
   - SDWebImage
+  - SKPhotoBrowser (from `../`)
 
 SPEC REPOS:
   trunk:
     - SDWebImage
 
+EXTERNAL SOURCES:
+  SKPhotoBrowser:
+    :path: "../"
+
 SPEC CHECKSUMS:
   SDWebImage: 098e97e6176540799c27e804c96653ee0833d13c
+  SKPhotoBrowser: 9f4690a60a4297b0b98e41d539caf29374e8a7cf
 
-PODFILE CHECKSUM: 48d639fa560d87286e5314591af8a3a89c6c887e
+PODFILE CHECKSUM: 160f583c6b4ba35725e5b097d0971da3e5b9a599
 
-COCOAPODS: 1.10.1
+COCOAPODS: 1.16.2

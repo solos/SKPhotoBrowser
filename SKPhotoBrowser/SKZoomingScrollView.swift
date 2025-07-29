@@ -7,12 +7,16 @@
 //
 
 import UIKit
+import PhotosUI
 
 open class SKZoomingScrollView: UIScrollView {
     var captionView: SKCaptionView!
     var photo: SKPhotoProtocol! {
         didSet {
             imageView.image = nil
+            if #available(iOS 9.1, *) {
+                livePhotoView.livePhoto = nil
+            }
             if photo != nil && photo.underlyingImage != nil {
                 displayImage(complete: true)
                 return
@@ -26,6 +30,8 @@ open class SKZoomingScrollView: UIScrollView {
     fileprivate weak var browser: SKPhotoBrowser?
     
     fileprivate(set) var imageView: SKDetectingImageView!
+    @available(iOS 9.1, *)
+    fileprivate var livePhotoView: SKLivePhotoView!
     fileprivate var tapView: SKDetectingView!
     fileprivate var indicatorView: SKIndicatorView!
     
@@ -63,6 +69,13 @@ open class SKZoomingScrollView: UIScrollView {
         imageView.contentMode = .bottom
         imageView.backgroundColor = .clear
         addSubview(imageView)
+        
+        // live photo view (iOS 9.1+)
+        if #available(iOS 9.1, *) {
+            livePhotoView = SKLivePhotoView(frame: frame)
+            livePhotoView.isHidden = true
+            addSubview(livePhotoView)
+        }
         
         // indicator
         indicatorView = SKIndicatorView(frame: frame)
@@ -103,6 +116,13 @@ open class SKZoomingScrollView: UIScrollView {
         // Center
         if !imageView.frame.equalTo(frameToCenter) {
             imageView.frame = frameToCenter
+        }
+        
+        // Center live photo view if available
+        if #available(iOS 9.1, *) {
+            if let livePhotoView = livePhotoView, !livePhotoView.isHidden {
+                livePhotoView.frame = frameToCenter
+            }
         }
     }
     
@@ -158,6 +178,9 @@ open class SKZoomingScrollView: UIScrollView {
 
         // reset position
         imageView.frame.origin = CGPoint.zero
+        if #available(iOS 9.1, *) {
+            livePhotoView.frame.origin = CGPoint.zero
+        }
         setNeedsLayout()
     }
     
@@ -170,9 +193,22 @@ open class SKZoomingScrollView: UIScrollView {
     }
     
     open func displayImage(_ image: UIImage) {
-        // image
+        // Check if this is a Live Photo
+        if #available(iOS 9.1, *) {
+            if let livePhoto = photo as? SKLivePhoto, livePhoto.isLivePhoto, livePhoto.livePhoto != nil {
+                displayLivePhoto(livePhoto.livePhoto!, image: image)
+                return
+            }
+        }
+        
+        // Regular image display
         imageView.image = image
         imageView.contentMode = photo.contentMode
+        imageView.isHidden = false
+        
+        if #available(iOS 9.1, *) {
+            livePhotoView.isHidden = true
+        }
         
         var imageViewFrame: CGRect = .zero
         imageViewFrame.origin = .zero
@@ -184,6 +220,30 @@ open class SKZoomingScrollView: UIScrollView {
             imageViewFrame.size = image.size
         }
         imageView.frame = imageViewFrame
+        
+        contentSize = imageViewFrame.size
+        setMaxMinZoomScalesForCurrentBounds()
+    }
+    
+    @available(iOS 9.1, *)
+    open func displayLivePhoto(_ livePhoto: PHLivePhoto, image: UIImage) {
+        // Live Photo display
+        livePhotoView.livePhoto = livePhoto
+        livePhotoView.image = image
+        livePhotoView.contentMode = photo.contentMode
+        livePhotoView.isHidden = false
+        imageView.isHidden = true
+        
+        var imageViewFrame: CGRect = .zero
+        imageViewFrame.origin = .zero
+        // long photo
+        if SKPhotoBrowserOptions.longPhotoWidthMatchScreen && image.size.height >= image.size.width {
+            let imageHeight = SKMesurement.screenWidth / image.size.width * image.size.height
+            imageViewFrame.size = CGSize(width: SKMesurement.screenWidth, height: imageHeight)
+        } else {
+            imageViewFrame.size = image.size
+        }
+        livePhotoView.frame = imageViewFrame
         
         contentSize = imageViewFrame.size
         setMaxMinZoomScalesForCurrentBounds()
@@ -248,6 +308,11 @@ open class SKZoomingScrollView: UIScrollView {
 
 extension SKZoomingScrollView: UIScrollViewDelegate {
     public func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        if #available(iOS 9.1, *) {
+            if let livePhotoView = livePhotoView, !livePhotoView.isHidden {
+                return livePhotoView
+            }
+        }
         return imageView
     }
     

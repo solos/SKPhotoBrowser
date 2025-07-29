@@ -1,5 +1,16 @@
 # Change Log
 
+## 7.1.0
+### Added
+- **Live Photo support** - Added support for displaying and playing Live Photos with tap-to-play functionality
+- New `SKLivePhoto` class for handling Live Photo data
+- New `SKLivePhotoView` component for Live Photo display
+- Live Photo example in the demo app
+- Tap-to-play functionality for Live Photos
+
+### Requirements
+- iOS 9.1+ for Live Photo support
+
 ## 7.0.0
 ### Big Changed
 - Support xcode12.x. swift5.2

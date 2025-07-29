@@ -23,6 +23,7 @@ Simple PhotoBrowser/Viewer inspired by facebook, twitter photo browsers written 
 
 ## features
 - Display one or more images by providing either `UIImage` objects, or string of URL array.
+- **Live Photo support** - Display and play Live Photos with tap-to-play functionality
 - Photos can be zoomed and panned, and optional captions can be displayed
 - Minimalistic Facebook-like interface, swipe up/down to dismiss
 - Ability to custom control. (hide/ show toolbar for controls, / swipe control)
@@ -118,6 +119,22 @@ images.append(photo)
 let browser = SKPhotoBrowser(photos: images)
 browser.initializePageIndex(0)
 present(browser, animated: true, completion: {})
+```
+
+from Live Photos (iOS 9.1+):
+```swift
+// 1. create Live Photo array
+var images = [SKLivePhoto]()
+let photo = SKLivePhoto.photoWithLivePhoto(livePhoto, image: thumbnailImage)
+images.append(photo)
+
+// 2. create PhotoBrowser Instance, and present.
+let browser = SKPhotoBrowser(photos: images)
+browser.initializePageIndex(0)
+present(browser, animated: true, completion: {})
+
+// 3. Live Photos support tap-to-play functionality
+// Users can tap on Live Photos to start/stop playback
 ```
 
 If you want to use zooming effect from an existing view, use another initializer:
