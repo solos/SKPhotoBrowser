@@ -34,8 +34,8 @@ open class SKLivePhotoView: UIView {
         }
         set {
             super.contentMode = newValue
-            imageView.contentMode = newValue
-            livePhotoView.contentMode = newValue
+            imageView?.contentMode = newValue
+            livePhotoView?.contentMode = newValue
         }
     }
     
@@ -57,17 +57,17 @@ open class SKLivePhotoView: UIView {
         
         // Setup image view as fallback
         imageView = UIImageView()
-        imageView.contentMode = contentMode
-        imageView.backgroundColor = .clear
-        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView?.contentMode = contentMode
+        imageView?.backgroundColor = .clear
+        imageView?.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         
         // Setup live photo view
         livePhotoView = PHLivePhotoView()
-        livePhotoView.contentMode = contentMode
-        livePhotoView.backgroundColor = .clear
-        livePhotoView.translatesAutoresizingMaskIntoConstraints = false
-        livePhotoView.isHidden = true
+        livePhotoView?.contentMode = contentMode
+        livePhotoView?.backgroundColor = .clear
+        livePhotoView?.translatesAutoresizingMaskIntoConstraints = false
+        livePhotoView?.isHidden = true
         addSubview(livePhotoView)
         
         // Setup constraints
@@ -86,27 +86,27 @@ open class SKLivePhotoView: UIView {
     
     private func updateLivePhoto() {
         guard let livePhoto = livePhoto else {
-            livePhotoView.isHidden = true
-            imageView.isHidden = false
+            livePhotoView?.isHidden = true
+            imageView?.isHidden = false
             return
         }
         
-        livePhotoView.livePhoto = livePhoto
-        livePhotoView.isHidden = false
-        imageView.isHidden = true
+        livePhotoView?.livePhoto = livePhoto
+        livePhotoView?.isHidden = false
+        imageView?.isHidden = true
         isLivePhotoAvailable = true
     }
     
     private func updateImage() {
         guard let image = image else {
-            imageView.image = nil
+            imageView?.image = nil
             return
         }
         
-        imageView.image = image
+        imageView?.image = image
         if !isLivePhotoAvailable {
-            imageView.isHidden = false
-            livePhotoView.isHidden = true
+            imageView?.isHidden = false
+            livePhotoView?.isHidden = true
         }
     }
     
@@ -114,13 +114,13 @@ open class SKLivePhotoView: UIView {
     
     public func startPlayback() {
         guard isLivePhotoAvailable else { return }
-        livePhotoView.startPlayback(with: .hint)
+        livePhotoView?.startPlayback(with: .hint)
         isCurrentlyPlaying = true
     }
     
     public func stopPlayback() {
         guard isLivePhotoAvailable else { return }
-        livePhotoView.stopPlayback()
+        livePhotoView?.stopPlayback()
         isCurrentlyPlaying = false
     }
     
