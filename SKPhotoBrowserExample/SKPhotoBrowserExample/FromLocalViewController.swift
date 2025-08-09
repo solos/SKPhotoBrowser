@@ -75,13 +75,13 @@ extension FromLocalViewController {
 
 extension FromLocalViewController {
     func didShowPhotoAtIndex(_ index: Int) {
-        collectionView.visibleCells.forEach({$0.isHidden = false})
-        collectionView.cellForItem(at: IndexPath(item: index, section: 0))?.isHidden = true
+        //collectionView.visibleCells.forEach({$0.isHidden = false})
+        //collectionView.cellForItem(at: IndexPath(item: index, section: 0))?.isHidden = true
     }
     
     func willDismissAtPageIndex(_ index: Int) {
-        collectionView.visibleCells.forEach({$0.isHidden = false})
-        collectionView.cellForItem(at: IndexPath(item: index, section: 0))?.isHidden = true
+        //collectionView.visibleCells.forEach({$0.isHidden = false})
+        //collectionView.cellForItem(at: IndexPath(item: index, section: 0))?.isHidden = true
     }
     
     func willShowActionSheet(_ photoIndex: Int) {
@@ -89,7 +89,7 @@ extension FromLocalViewController {
     }
     
     func didDismissAtPageIndex(_ index: Int) {
-        collectionView.cellForItem(at: IndexPath(item: index, section: 0))?.isHidden = false
+        //collectionView.cellForItem(at: IndexPath(item: index, section: 0))?.isHidden = false
     }
     
     func didDismissActionSheetWithButtonIndex(_ buttonIndex: Int, photoIndex: Int) {
