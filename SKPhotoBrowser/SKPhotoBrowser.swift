@@ -467,6 +467,7 @@ internal extension SKPhotoBrowser {
             
             
             let share = UIAlertAction(title: "分享", style: .default, handler: self.shareHandler)
+            let copy = UIAlertAction(title: "复制图片", style: .default, handler: self.copyHandler)
 
             
             let cancle = UIAlertAction(title: "取消", style: .destructive, handler: {
@@ -478,6 +479,7 @@ internal extension SKPhotoBrowser {
             
             alert.addAction(save)
             alert.addAction(share)
+            alert.addAction(copy)
             alert.addAction(cancle)
             
             if UIDevice.current.userInterfaceIdiom == .pad {
@@ -534,6 +536,23 @@ internal extension SKPhotoBrowser {
                     
                     
                     
+                }
+            }
+        }
+    }
+
+    func copyHandler(sender:UIAlertAction) {
+        let photo = photos[currentPageIndex]
+        let p = photo as? SKPhoto
+        if p != nil {
+            let url = p!.photoURL
+            if url != nil {
+                if url!.lowercased().hasSuffix(".gif"){
+                    let data = SKCache.sharedCache.dataForKey(url!)
+                    UIPasteboard.general.setData(data!, forPasteboardType: "public.gif")
+                } else {
+                    let image = SKCache.sharedCache.imageForKey(url!)
+                    UIPasteboard.general.image = image
                 }
             }
         }
