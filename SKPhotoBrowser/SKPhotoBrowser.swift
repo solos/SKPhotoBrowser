@@ -770,11 +770,13 @@ extension SKPhotoBrowser: UIGestureRecognizerDelegate {
               let zoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
             return true
         }
+        guard zoomingScrollView.zoomScale == 1 else { return false }
         let velocity = pan.velocity(in: view)
-        if zoomingScrollView.zoomScale == 1 && abs(velocity.y) > abs(velocity.x) {
-            return true
-        }
-        return false
+        let absVx = abs(velocity.x)
+        let absVy = abs(velocity.y)
+        // When velocity is near zero (e.g. start of drag), allow so low-height image can still dismiss
+        if absVx < 50 && absVy < 50 { return true }
+        return absVy >= absVx
     }
 
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {

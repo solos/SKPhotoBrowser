@@ -102,7 +102,7 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
 
 final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
-        SKPhotoBrowserOptions.bounceAnimation ? 0.5 : 0.35
+        SKPhotoBrowserOptions.bounceAnimation ? 0.58 : 0.42
     }
 
     func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
@@ -115,7 +115,7 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
         let originView = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex) ?? fromVC.animator.senderViewForAnimation
 
         guard let sender = originView, let zoomingScrollView = fromVC.pageDisplayedAtIndex(fromVC.currentPageIndex) else {
-            UIView.animate(withDuration: 0.25, animations: {
+            UIView.animate(withDuration: 0.28, delay: 0, options: .curveEaseOut, animations: {
                 fromVC.view.alpha = 0
             }, completion: { finished in
                 transitionContext.completeTransition(finished)
@@ -146,15 +146,34 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
         zoomingScrollView.isHidden = true
 
         let duration = transitionDuration(using: transitionContext)
-        let damping: CGFloat = SKPhotoBrowserOptions.bounceAnimation ? 0.8 : 1.0
+        let targetCornerRadius = sender.layer.cornerRadius
+        if targetCornerRadius > 0 {
+            transitionView.layer.masksToBounds = true
+            transitionView.layer.cornerRadius = 0
+            transitionView.addCornerRadiusAnimation(0, to: targetCornerRadius, duration: duration)
+        }
 
-        UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
-            transitionView.frame = finalFrame
-            fromVC.view.alpha = 0
-        }, completion: { finished in
+        let cleanup = {
             transitionView.removeFromSuperview()
             zoomingScrollView.isHidden = false
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
-        })
+        }
+
+        if SKPhotoBrowserOptions.bounceAnimation {
+            let damping: CGFloat = 0.82
+            UIView.animate(withDuration: duration * 0.7, delay: 0, options: .curveEaseIn, animations: {
+                fromVC.view.alpha = 0
+            })
+            UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0.3, options: .curveEaseOut, animations: {
+                transitionView.frame = finalFrame
+            }, completion: { _ in cleanup() })
+        } else {
+            UIView.animate(withDuration: duration * 0.65, delay: 0, options: .curveEaseIn, animations: {
+                fromVC.view.alpha = 0
+            })
+            UIView.animate(withDuration: duration, delay: 0, options: .curveEaseInOut, animations: {
+                transitionView.frame = finalFrame
+            }, completion: { _ in cleanup() })
+        }
     }
 }
