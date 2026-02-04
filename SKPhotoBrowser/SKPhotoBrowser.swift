@@ -40,10 +40,6 @@ open class SKPhotoBrowser: UIViewController {
     fileprivate var isViewActive: Bool = false
     fileprivate var isPerformingLayout: Bool = false
     
-    // pangesture property
-    fileprivate var firstX: CGFloat = 0.0
-    fileprivate var firstY: CGFloat = 0.0
-    
     // timer
     fileprivate var controlVisibilityTimer: Timer!
     
@@ -96,7 +92,8 @@ open class SKPhotoBrowser: UIViewController {
     
     func setup() {
         modalPresentationCapturesStatusBarAppearance = true
-        modalPresentationStyle = .custom
+        transitioningDelegate = self
+        modalPresentationStyle = .overFullScreen
         modalTransitionStyle = .crossDissolve
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(handleSKPhotoLoadingDidEndNotification(_:)),
@@ -113,8 +110,6 @@ open class SKPhotoBrowser: UIViewController {
         configureActionView()
         configurePaginationView()
         configureToolbar()
-        
-        animator.willPresent(self)
     }
     
     override open func viewWillAppear(_ animated: Bool) {
@@ -159,6 +154,10 @@ open class SKPhotoBrowser: UIViewController {
     
     override open var prefersStatusBarHidden: Bool {
         return !SKPhotoBrowserOptions.displayStatusbar
+    }
+
+    override open var preferredStatusBarUpdateAnimation: UIStatusBarAnimation {
+        return .fade
     }
     
     // MARK: - Notification
@@ -219,7 +218,7 @@ open class SKPhotoBrowser: UIViewController {
         if !animated {
             modalTransitionStyle = .crossDissolve
         }
-        dismiss(animated: !animated) {
+        dismiss(animated: animated) {
             completion?()
             self.delegate?.didDismissAtPageIndex?(self.currentPageIndex)
         }
@@ -227,7 +226,7 @@ open class SKPhotoBrowser: UIViewController {
     
     open func determineAndClose() {
         delegate?.willDismissAtPageIndex?(self.currentPageIndex)
-        animator.willDismiss(self)
+        dismissPhotoBrowser(animated: true)
     }
     
     open func popupShare(includeCaption: Bool = true) {
@@ -562,56 +561,33 @@ internal extension SKPhotoBrowser {
         guard let zoomingScrollView: SKZoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
             return
         }
-        
-        animator.backgroundView.isHidden = true
-        let viewHeight: CGFloat = zoomingScrollView.frame.size.height
-        let viewHalfHeight: CGFloat = viewHeight/2
-        var translatedPoint: CGPoint = sender.translation(in: self.view)
-        
-        // gesture began
-        if sender.state == .began {
-            firstX = zoomingScrollView.center.x
-            firstY = zoomingScrollView.center.y
-            
+
+        let translation = sender.translation(in: view)
+        let velocity = sender.velocity(in: view)
+        let progress = min(max(translation.y / view.bounds.height, 0), 1)
+
+        switch sender.state {
+        case .began:
             hideControls()
             setNeedsStatusBarAppearanceUpdate()
-        }
-        
-        translatedPoint = CGPoint(x: firstX, y: firstY + translatedPoint.y)
-        zoomingScrollView.center = translatedPoint
-        
-        let minOffset: CGFloat = viewHalfHeight / 4
-        let offset: CGFloat = 1 - (zoomingScrollView.center.y > viewHalfHeight
-                                    ? zoomingScrollView.center.y - viewHalfHeight
-                                    : -(zoomingScrollView.center.y - viewHalfHeight)) / viewHalfHeight
-        
-        view.backgroundColor = bgColor.withAlphaComponent(max(0.7, offset))
-        
-        // gesture end
-        if sender.state == .ended {
-            
-            if zoomingScrollView.center.y > viewHalfHeight + minOffset
-                || zoomingScrollView.center.y < viewHalfHeight - minOffset {
-                
+
+        case .changed:
+            let scale = max(0.5, 1 - progress)
+            zoomingScrollView.transform = CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: translation.x, y: translation.y)
+            view.backgroundColor = bgColor.withAlphaComponent(1 - progress)
+
+        case .ended, .cancelled:
+            if progress > 0.2 || velocity.y > 800 {
                 determineAndClose()
-                
             } else {
-                // Continue Showing View
+                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut) {
+                    zoomingScrollView.transform = .identity
+                    self.view.backgroundColor = self.bgColor
+                }
                 setNeedsStatusBarAppearanceUpdate()
-                view.backgroundColor = bgColor
-                
-                let velocityY: CGFloat = CGFloat(0.35) * sender.velocity(in: self.view).y
-                let finalX: CGFloat = firstX
-                let finalY: CGFloat = viewHalfHeight
-                
-                let animationDuration: Double = Double(abs(velocityY) * 0.0002 + 0.2)
-                
-                UIView.beginAnimations(nil, context: nil)
-                UIView.setAnimationDuration(animationDuration)
-                UIView.setAnimationCurve(UIView.AnimationCurve.easeIn)
-                zoomingScrollView.center = CGPoint(x: finalX, y: finalY)
-                UIView.commitAnimations()
             }
+
+        default: break
         }
     }
     
@@ -694,6 +670,7 @@ private extension SKPhotoBrowser {
         panGesture = UIPanGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.panGestureRecognized(_:)))
         panGesture?.minimumNumberOfTouches = 1
         panGesture?.maximumNumberOfTouches = 1
+        panGesture?.delegate = self
         
         if let panGesture = panGesture {
             view.addGestureRecognizer(panGesture)
@@ -770,5 +747,40 @@ extension SKPhotoBrowser: UIScrollViewDelegate {
     
     public func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
         isEndAnimationByToolBar = true
+    }
+}
+
+// MARK: - UIViewControllerTransitioningDelegate
+
+extension SKPhotoBrowser: UIViewControllerTransitioningDelegate {
+    public func animationController(forPresented presented: UIViewController, presenting: UIViewController, source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        return SKPhotoBrowserPresentAnimator()
+    }
+
+    public func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        return SKPhotoBrowserDismissAnimator()
+    }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension SKPhotoBrowser: UIGestureRecognizerDelegate {
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              let zoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
+            return true
+        }
+        let velocity = pan.velocity(in: view)
+        if zoomingScrollView.zoomScale == 1 && abs(velocity.y) > abs(velocity.x) {
+            return true
+        }
+        return false
+    }
+
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer is UIPanGestureRecognizer && otherGestureRecognizer is UIPanGestureRecognizer {
+            return false
+        }
+        return true
     }
 }

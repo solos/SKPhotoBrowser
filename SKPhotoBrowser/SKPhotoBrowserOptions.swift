@@ -26,7 +26,7 @@ public struct SKPhotoBrowserOptions {
     
     public static var bounceAnimation: Bool = false
     public static var enableZoomBlackArea: Bool = true
-    public static var enableSingleTapDismiss: Bool = false
+    public static var enableSingleTapDismiss: Bool = true
     
     public static var backgroundColor: UIColor = .black
     public static var indicatorColor: UIColor = .white
