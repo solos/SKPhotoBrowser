@@ -17,7 +17,6 @@ open class SKPhotoBrowser: UIViewController {
     // MARK: - Interactive Dismiss Support
     private var interactiveDismissSnapshot: UIView?
     private var interactiveDismissOriginFrame: CGRect = .zero
-    private var isInteractivelyDismissing = false
     open var currentPageIndex: Int = 0
     open var initPageIndex: Int = 0
     open var activityItemProvider: UIActivityItemProvider?
