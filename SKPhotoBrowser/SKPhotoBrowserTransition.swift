@@ -160,7 +160,10 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
         let scaleEnd: CGFloat = 0.92
         transitionView.transform = .identity
 
-        let cleanup = {
+        var didCompleteTransition = false
+        let finishTransition = {
+            guard !didCompleteTransition else { return }
+            didCompleteTransition = true
             transitionView.removeFromSuperview()
             transitionView.transform = .identity
             zoomingScrollView.isHidden = false
@@ -170,6 +173,12 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
             fromVC.animator.senderViewOriginalBackgroundColor = nil
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
         }
+
+        // 交互式取消时系统可能不调用动画 completion，用延迟兜底确保转场一定结束，避免卡住
+        let maxWait = duration + 0.6
+        DispatchQueue.main.asyncAfter(deadline: .now() + maxWait) { finishTransition() }
+
+        let cleanup = { DispatchQueue.main.async(execute: finishTransition) }
 
         if SKPhotoBrowserOptions.bounceAnimation {
             let damping: CGFloat = 0.86
@@ -181,7 +190,6 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
                 transitionView.transform = CGAffineTransform(scaleX: scaleEnd, y: scaleEnd)
             }, completion: { _ in cleanup() })
         } else {
-            // 使用线性/缓动动画，便于 UIPercentDrivenInteractiveTransition 同步拖动进度
             UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
                 fromVC.view.alpha = 0
                 transitionView.frame = finalFrame

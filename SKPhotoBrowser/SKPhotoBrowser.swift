@@ -611,6 +611,7 @@ internal extension SKPhotoBrowser {
 
             if let controller = dismissInteractionController {
                 if shouldDismiss {
+                    prepareForClosePhotoBrowser()
                     controller.completionSpeed = 0.85
                     controller.finish()
                 } else {
