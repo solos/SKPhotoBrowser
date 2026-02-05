@@ -718,7 +718,7 @@ private extension SKPhotoBrowser {
         
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
         longPressRecognizer.minimumPressDuration = 0.5
-        longPressRecognizer.delaysTouchesBegan = true
+        longPressRecognizer.delaysTouchesBegan = false
         self.view.addGestureRecognizer(longPressRecognizer)
     }
     
@@ -823,17 +823,15 @@ extension SKPhotoBrowser: UIGestureRecognizerDelegate {
         // Only allow swipe down
         if translation.y <= 0 { return false }
 
+        // If it's clearly more horizontal than vertical, don't start
         let absVx = abs(velocity.x)
         let absVy = abs(velocity.y)
-        
-        // If it's more horizontal than vertical, don't start
-        return absVy > absVx
+        if absVx > absVy * 1.2 { return false }
+
+        return true
     }
 
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        if gestureRecognizer is UIPanGestureRecognizer && otherGestureRecognizer is UIPanGestureRecognizer {
-            return false
-        }
         return true
     }
 }
