@@ -156,8 +156,13 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
             transitionView.addCornerRadiusAnimation(0, to: targetCornerRadius, duration: duration)
         }
 
+        // 系统相册风格：结束时图片略缩小，便于交互式滑动时与手势同步
+        let scaleEnd: CGFloat = 0.92
+        transitionView.transform = .identity
+
         let cleanup = {
             transitionView.removeFromSuperview()
+            transitionView.transform = .identity
             zoomingScrollView.isHidden = false
             if let origin = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex) ?? fromVC.animator.senderViewForAnimation {
                 origin.backgroundColor = fromVC.animator.senderViewOriginalBackgroundColor ?? .clear
@@ -173,13 +178,14 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
             })
             UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0.2, options: .curveEaseOut, animations: {
                 transitionView.frame = finalFrame
+                transitionView.transform = CGAffineTransform(scaleX: scaleEnd, y: scaleEnd)
             }, completion: { _ in cleanup() })
         } else {
-            UIView.animate(withDuration: duration * 0.7, delay: 0, options: .curveEaseIn, animations: {
-                fromVC.view.alpha = 0
-            })
+            // 使用线性/缓动动画，便于 UIPercentDrivenInteractiveTransition 同步拖动进度
             UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
+                fromVC.view.alpha = 0
                 transitionView.frame = finalFrame
+                transitionView.transform = CGAffineTransform(scaleX: scaleEnd, y: scaleEnd)
             }, completion: { _ in cleanup() })
         }
     }

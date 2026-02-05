@@ -578,11 +578,12 @@ internal extension SKPhotoBrowser {
 
         let translation = sender.translation(in: view)
         let velocity = sender.velocity(in: view)
-        let imageViewHeight = zoomingScrollView.imageView.frame.height
         let screenHeight = view.bounds.height
-        let baseThreshold: CGFloat = min(screenHeight * 0.4, max(screenHeight * 0.2, imageViewHeight * 1.2))
-        let progress = min(abs(translation.y) / max(baseThreshold, 100), 1)
-        let velocityThreshold: CGFloat = 400
+
+        // 与系统相册一致：进度与下滑距离挂钩，图像跟随手指（约拖半屏即可接近 100%）
+        let dragDistanceForFullDismiss = screenHeight * 0.5
+        let rawProgress = translation.y > 0 ? translation.y / dragDistanceForFullDismiss : 0
+        let progress = min(max(rawProgress, 0), 1)
 
         switch sender.state {
         case .began:
@@ -590,31 +591,34 @@ internal extension SKPhotoBrowser {
                 hideControls()
                 setNeedsStatusBarAppearanceUpdate()
                 isInteractivelyDismissing = true
-                dismissInteractionController = UIPercentDrivenInteractiveTransition()
+                let controller = UIPercentDrivenInteractiveTransition()
+                controller.completionCurve = .easeOut
+                dismissInteractionController = controller
                 startInteractiveDismiss()
             }
 
         case .changed:
             if translation.y > 0 {
                 dismissInteractionController?.update(progress)
-            } else if translation.y < 0 {
-                // If it was already interactively dismissing, we should update it
-                // but usually translation.y > 0 is required to start
+            } else {
                 dismissInteractionController?.update(0)
             }
 
         case .ended, .cancelled:
-            let dismissThreshold: CGFloat = 0.15
-            // 显著降低速度门槛，即使只滑了一点点，只要有向下的甩动动作就关闭
-            let quickSwipeThreshold: CGFloat = 250 
-            let shouldDismiss = (progress > dismissThreshold || velocity.y > quickSwipeThreshold) && translation.y > 0
+            let dismissThreshold: CGFloat = 0.22
+            let quickSwipeVelocity: CGFloat = 180
+            let shouldDismiss = (progress >= dismissThreshold || velocity.y > quickSwipeVelocity) && translation.y > 0
 
-            if shouldDismiss {
-                dismissInteractionController?.finish()
-            } else {
-                dismissInteractionController?.cancel()
-                isInteractivelyDismissing = false
-                showButtons()
+            if let controller = dismissInteractionController {
+                if shouldDismiss {
+                    controller.completionSpeed = 0.85
+                    controller.finish()
+                } else {
+                    controller.completionSpeed = 0.4
+                    controller.cancel()
+                    isInteractivelyDismissing = false
+                    showButtons()
+                }
             }
             dismissInteractionController = nil
             setNeedsStatusBarAppearanceUpdate()
