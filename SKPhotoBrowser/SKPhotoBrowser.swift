@@ -597,7 +597,12 @@ internal extension SKPhotoBrowser {
             isInteractivelyDismissing = true
             
             // Calculate origin frame
-            let originView = delegate?.viewForPhoto?(self, index: currentPageIndex) ?? animator.senderViewForAnimation
+            var originView = delegate?.viewForPhoto?(self, index: currentPageIndex)
+            // Fallback to animator sender view ONLY if we are at the initial page
+            if originView == nil && currentPageIndex == initPageIndex {
+                originView = animator.senderViewForAnimation
+            }
+            
             if let originView = originView, let window = originView.window {
                 let rectInWindow = originView.convert(originView.bounds, to: window)
                 interactiveDismissOriginFrame = view.convert(rectInWindow, from: nil)
@@ -651,6 +656,11 @@ internal extension SKPhotoBrowser {
                 UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
                     if self.interactiveDismissOriginFrame != .zero {
                         snapshot.frame = self.interactiveDismissOriginFrame
+                        snapshot.layer.cornerRadius = 0
+                        if let originView = self.delegate?.viewForPhoto?(self, index: self.currentPageIndex) ?? (self.currentPageIndex == self.initPageIndex ? self.animator.senderViewForAnimation : nil) {
+                           snapshot.layer.cornerRadius = originView.layer.cornerRadius
+                           snapshot.layer.masksToBounds = true
+                        }
                     } else {
                         snapshot.alpha = 0
                         snapshot.transform = CGAffineTransform(scaleX: 0.3, y: 0.3)

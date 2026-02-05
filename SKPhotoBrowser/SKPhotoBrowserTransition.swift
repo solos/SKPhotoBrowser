@@ -112,7 +112,11 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
         }
 
         let containerView = transitionContext.containerView
-        let originView = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex) ?? fromVC.animator.senderViewForAnimation
+        var originView = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex)
+        // Fallback to animator sender view ONLY if we are at the initial page
+        if originView == nil && fromVC.currentPageIndex == fromVC.initPageIndex {
+            originView = fromVC.animator.senderViewForAnimation
+        }
 
         guard let sender = originView, let zoomingScrollView = fromVC.pageDisplayedAtIndex(fromVC.currentPageIndex) else {
             UIView.animate(withDuration: 0.28, delay: 0, options: .curveEaseOut, animations: {
