@@ -451,12 +451,12 @@ internal extension SKPhotoBrowser {
 // MARK: - Internal Function For Button Pressed, UIGesture Control
 
 internal extension SKPhotoBrowser {
-    @objc func longpress(_ sender: UIGestureRecognizer){
-        
-        if photos.count > currentPageIndex {
+    @objc func longpress(_ sender: UIGestureRecognizer) {
+        if sender.state == .began {
+            guard photos.count > currentPageIndex else { return }
             let photo = photos[currentPageIndex]
             
-            let alert = UIAlertController()
+            let alert = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
             
             let save = UIAlertAction(title: "保存", style: .default, handler: {
                 [weak self] ACTION in
@@ -490,17 +490,10 @@ internal extension SKPhotoBrowser {
                 
             })
             
-            
             let share = UIAlertAction(title: "分享", style: .default, handler: self.shareHandler)
             let copy = UIAlertAction(title: "复制图片", style: .default, handler: self.copyHandler)
-
             
-            let cancle = UIAlertAction(title: "取消", style: .destructive, handler: {
-                [weak self] ACTION in
-                guard let _ = self else { return }
-            })
-            
-            //alert.addAction(copy)
+            let cancle = UIAlertAction(title: "取消", style: .cancel, handler: nil)
             
             alert.addAction(save)
             alert.addAction(share)
@@ -508,18 +501,12 @@ internal extension SKPhotoBrowser {
             alert.addAction(cancle)
             
             if UIDevice.current.userInterfaceIdiom == .pad {
-                
-                
                 alert.modalPresentationStyle = .popover
-                //let popover: UIPopoverPresentationController! = activityViewController.popoverPresentationController
-                //popover.barButtonItem = self.toolbar.toolActionButton
-                
                 alert.popoverPresentationController?.sourceView = self.view
                 alert.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
-
+                alert.popoverPresentationController?.permittedArrowDirections = []
             }
             self.present(alert, animated: true, completion: nil)
-            
         }
     }
 
