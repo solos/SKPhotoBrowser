@@ -591,96 +591,95 @@ internal extension SKPhotoBrowser {
         
         switch sender.state {
         case .began:
-            // 只有向下拖动且允许关闭时才启动
-            if translation.y > 0 && shouldAllowPanToDismiss(for: zoomingScrollView) {
-                hideControls()
-                setNeedsStatusBarAppearanceUpdate()
-                
-                // 创建 origin frame（目标缩小位置）
-                let originView = delegate?.viewForPhoto?(self, index: currentPageIndex) ?? animator.senderViewForAnimation ?? view
-                interactiveDismissOriginFrame = calcOriginFrame(originView)
-                
-                // 创建快照视图
-                guard let snapshot = zoomingScrollView.imageView.snapshotView(afterScreenUpdates: true) else {
-                    return
-                }
-                interactiveDismissSnapshot = snapshot
-                
-                // 添加到主视图，并隐藏原图
-                view.addSubview(snapshot)
-                snapshot.frame = zoomingScrollView.imageView.convert(zoomingScrollView.imageView.bounds, to: view)
-                zoomingScrollView.imageView.alpha = 0
-                
-                // 标记状态
-                isInteractivelyDismissing = true
-                let controller = UIPercentDrivenInteractiveTransition()
-                controller.completionCurve = .easeOut
-                dismissInteractionController = controller
-                startInteractiveDismiss()
-            }
-
-        case .changed:
-            guard let snapshot = interactiveDismissSnapshot, isInteractivelyDismissing else { return }
+            guard shouldAllowPanToDismiss(for: zoomingScrollView) else { return }
             
-            if translation.y > 0 {
-                let progress = min(max(translation.y / (view.bounds.height * 0.6), 0), 1)
-                dismissInteractionController?.update(progress)
-                
-                // 计算目标中心点（向 origin view 中心靠拢）
-                let targetCenter = CGPoint(
-                    x: interactiveDismissOriginFrame.midX,
-                    y: interactiveDismissOriginFrame.midY + translation.y
-                )
-                snapshot.center = targetCenter
-                
-                // 缩放：从 1.0 → 0.92
-                let scale = 0.92 + (1.0 - 0.92) * (1 - progress)
-                snapshot.transform = CGAffineTransform(scaleX: scale, y: scale)
-                
-                // 背景透明度
-                view.backgroundColor = bgColor.withAlphaComponent(1 - progress * 0.7)
+            hideControls()
+            isInteractivelyDismissing = true
+            
+            // Calculate origin frame
+            let originView = delegate?.viewForPhoto?(self, index: currentPageIndex) ?? animator.senderViewForAnimation
+            if let originView = originView, let window = originView.window {
+                let rectInWindow = originView.convert(originView.bounds, to: window)
+                interactiveDismissOriginFrame = view.convert(rectInWindow, from: nil)
             } else {
-                // 向上拖动：取消进度
-                dismissInteractionController?.update(0)
-                snapshot.center = CGPoint(
-                    x: view.center.x,
-                    y: view.center.y + translation.y
-                )
-                snapshot.transform = .identity
-                view.backgroundColor = bgColor
-            }
-
-        case .ended, .cancelled:
-            defer {
-                // 清理资源
-                interactiveDismissSnapshot?.removeFromSuperview()
-                interactiveDismissSnapshot = nil
-                if let scrollView = pageDisplayedAtIndex(currentPageIndex) {
-                    scrollView.imageView.alpha = 1
-                }
-                view.backgroundColor = bgColor
-                isInteractivelyDismissing = false
-                setNeedsStatusBarAppearanceUpdate()
+                interactiveDismissOriginFrame = .zero
             }
             
-            guard isInteractivelyDismissing, let controller = dismissInteractionController else {
-                showButtons()
+            // Create snapshot
+            guard let snapshot = zoomingScrollView.imageView.snapshotView(afterScreenUpdates: true) else {
                 return
             }
+            interactiveDismissSnapshot = snapshot
             
-            let progress = min(max(translation.y / (view.bounds.height * 0.6), 0), 1)
+            // Setup snapshot frame
+            let frameInView = zoomingScrollView.imageView.convert(zoomingScrollView.imageView.bounds, to: view)
+            snapshot.frame = frameInView
+            snapshot.contentMode = .scaleAspectFill
+            
+            view.addSubview(snapshot)
+            zoomingScrollView.imageView.isHidden = true
+            
+        case .changed:
+            guard isInteractivelyDismissing, let snapshot = interactiveDismissSnapshot else { return }
+            
+            // 1. Follow finger
+            let initialCenter = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            snapshot.center = CGPoint(x: initialCenter.x + translation.x, y: initialCenter.y + translation.y)
+            
+            // 2. Scale down as you drag (minimum 0.5)
+            // Use translation.y to determine scale factor
+            let progress = max(translation.y / view.bounds.height, 0)
+            let scale = max(0.5, 1 - progress * 1.2)
+            snapshot.transform = CGAffineTransform(scaleX: scale, y: scale)
+            
+            // 3. Fade background
+            // Fade out faster than scaling
+            let alpha = max(0, 1 - progress * 2.0)
+            view.backgroundColor = bgColor.withAlphaComponent(alpha)
+            
+        case .ended, .cancelled:
+            guard isInteractivelyDismissing, let snapshot = interactiveDismissSnapshot else { return }
+            
+            let dismissThreshold: CGFloat = 100
             let velocityThreshold: CGFloat = 800
-            let shouldDismiss = (progress > 0.3 || abs(velocity.y) > velocityThreshold) && translation.y > 0
+            
+            // Dismiss if dragged down enough OR flicked down fast enough
+            let shouldDismiss = (translation.y > dismissThreshold) || (velocity.y > velocityThreshold && translation.y > 0)
             
             if shouldDismiss {
-                prepareForClosePhotoBrowser()
-                controller.finish()
+                // Animate to origin (close)
+                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
+                    if self.interactiveDismissOriginFrame != .zero {
+                        snapshot.frame = self.interactiveDismissOriginFrame
+                    } else {
+                        snapshot.alpha = 0
+                        snapshot.transform = CGAffineTransform(scaleX: 0.3, y: 0.3)
+                    }
+                    self.view.backgroundColor = UIColor.clear
+                    self.actionView.alpha = 0 // Ensure other UI elements fade out
+                    self.paginationView.alpha = 0
+                    self.toolbar.alpha = 0
+                }, completion: { _ in
+                    self.dismissPhotoBrowser(animated: false)
+                    snapshot.removeFromSuperview()
+                })
             } else {
-                controller.cancel()
-                showButtons()
+                // Cancel (snap back)
+                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
+                    snapshot.transform = .identity
+                    snapshot.center = CGPoint(x: self.view.bounds.midX, y: self.view.bounds.midY)
+                    self.view.backgroundColor = self.bgColor
+                }, completion: { _ in
+                    zoomingScrollView.imageView.isHidden = false
+                    snapshot.removeFromSuperview()
+                    self.interactiveDismissSnapshot = nil
+                    self.isInteractivelyDismissing = false
+                    if !self.areControlsHidden() {
+                        self.showButtons()
+                    }
+                })
             }
-            dismissInteractionController = nil
-
+            
         default:
             break
         }

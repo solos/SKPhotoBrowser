@@ -106,13 +106,6 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
 final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTransitioning {
 
     func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
-        // ✅ 关键修复：如果是交互式转场，直接完成，不执行动画
-        if transitionContext.isInteractive {
-            transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
-            return
-        }
-
-        // ... 以下是原有非交互式关闭逻辑（保持不变）...
         guard let fromVC = transitionContext.viewController(forKey: .from) as? SKPhotoBrowser else {
             transitionContext.completeTransition(false)
             return
