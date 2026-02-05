@@ -570,14 +570,16 @@ internal extension SKPhotoBrowser {
     }
     
     @objc func panGestureRecognized(_ sender: UIPanGestureRecognizer) {
-        guard pagingScrollView.pageDisplayedAtIndex(currentPageIndex) != nil else {
+        guard let zoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
             return
         }
 
         let translation = sender.translation(in: view)
         let velocity = sender.velocity(in: view)
-        let height = view.bounds.height
-        let progress = min(abs(translation.y) / height, 1)
+
+        let imageViewHeight = zoomingScrollView.imageView.frame.height
+        let visibleImageHeight = min(imageViewHeight, view.bounds.height)
+        let progress = min(abs(translation.y) / max(visibleImageHeight, 1), 1)
 
         switch sender.state {
         case .began:
@@ -591,7 +593,10 @@ internal extension SKPhotoBrowser {
             dismissInteractionController?.update(progress)
 
         case .ended, .cancelled:
-            let shouldDismiss = progress > 0.12 || velocity.y > 120 || velocity.y < -120
+            let dismissThreshold = max(0.08, min(0.15, visibleImageHeight / view.bounds.height * 0.15))
+            let velocityThreshold: CGFloat = 100
+            let shouldDismiss = (progress > dismissThreshold || abs(velocity.y) > velocityThreshold) && translation.y > 0
+
             if shouldDismiss {
                 dismissInteractionController?.finish()
             } else {
