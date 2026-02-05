@@ -6,18 +6,19 @@
 //  Copyright © 2017 suzuki_keishi. All rights reserved.
 //
 
-import Foundation
+import UIKit
 
 internal extension UIApplication {
     var preferredApplicationWindow: UIWindow? {
-        // Since delegate window is of type UIWindow??, we have to
-        // unwrap it twice to be sure the window is not nil
         if let appWindow = UIApplication.shared.delegate?.window, let window = appWindow {
             return window
-        } else if let window = UIApplication.shared.keyWindow {
-            return window
         }
-
+        if #available(iOS 13.0, *) {
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow }
+        }
         return nil
     }
 }

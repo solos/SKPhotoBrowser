@@ -55,8 +55,7 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
         }
         
         if SKCache.sharedCache.imageCache is SKRequestResponseCacheable {
-            let request = URLRequest(url: URL(string: photoURL)!)
-            if let img = SKCache.sharedCache.imageForRequest(request) {
+            if let url = URL(string: photoURL), let img = SKCache.sharedCache.imageForRequest(URLRequest(url: url)) {
                 underlyingImage = img
             }
         } else {
@@ -67,42 +66,44 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
     }
     
     open func loadUnderlyingImageAndNotify() {
-    guard photoURL != nil, let URL = URL(string: photoURL) else { return }
+        guard let photoURL = photoURL, let url = URL(string: photoURL) else { return }
 
-        // Fetch Image
+        let request = URLRequest(url: url)
         let session = URLSession(configuration: SKPhotoBrowserOptions.sessionConfiguration)
-            var task: URLSessionTask?
-            task = session.dataTask(with: URL, completionHandler: { [weak self] (data, response, error) in
-                guard let `self` = self else { return }
-                defer { session.finishTasksAndInvalidate() }
+        let task = session.dataTask(with: request, completionHandler: { [weak self] (data, response, error) in
+            guard let self = self else { return }
+            defer { session.finishTasksAndInvalidate() }
 
-                guard error == nil else {
-                    DispatchQueue.main.async {
-                        self.loadUnderlyingImageComplete()
-                    }
-                    return
-                }
+            guard error == nil else {
+                DispatchQueue.main.async { self.loadUnderlyingImageComplete() }
+                return
+            }
 
-                if let data = data, let response = response, let image =  self.photoURL.lowercased().hasSuffix(".gif") == true ? UIImage.gif(data: data) : UIImage(data: data) {
-                    if self.shouldCachePhotoURLImage {
-                        if SKCache.sharedCache.imageCache is SKRequestResponseCacheable {
-                            SKCache.sharedCache.setImageData(data, response: response, request: task?.originalRequest)
+            guard let data = data, let response = response else { return }
+            let image: UIImage? = photoURL.lowercased().hasSuffix(".gif")
+                ? UIImage.gif(data: data)
+                : UIImage(data: data)
+            if let image = image {
+                if self.shouldCachePhotoURLImage {
+                    if SKCache.sharedCache.imageCache is SKRequestResponseCacheable {
+                        SKCache.sharedCache.setImageData(data, response: response, request: request)
+                    } else {
+                        if photoURL.lowercased().hasSuffix(".gif") {
+                            SKCache.sharedCache.setData(data, forKey: photoURL)
                         } else {
-                            if self.photoURL.lowercased().hasSuffix(".gif"){
-                                
-                                SKCache.sharedCache.setData(data, forKey: self.photoURL)
-                            } else {
-                                SKCache.sharedCache.setImage(image, forKey: self.photoURL)
-                            }
+                            SKCache.sharedCache.setImage(image, forKey: photoURL)
                         }
                     }
-                    DispatchQueue.main.async {
-                        self.underlyingImage = image
-                        self.loadUnderlyingImageComplete()
-                    }
                 }
-            })
-            task?.resume()
+                DispatchQueue.main.async {
+                    self.underlyingImage = image
+                    self.loadUnderlyingImageComplete()
+                }
+            } else {
+                DispatchQueue.main.async { self.loadUnderlyingImageComplete() }
+            }
+        })
+        task.resume()
     }
 
     open func loadUnderlyingImageComplete() {

@@ -34,6 +34,7 @@ open class SKPhotoBrowser: UIViewController {
     // actions
     fileprivate var activityViewController: UIActivityViewController!
     internal var panGesture: UIPanGestureRecognizer?
+    fileprivate var longPressGesture: UILongPressGestureRecognizer?
     /// Interactive dismiss (UIPercentDrivenInteractiveTransition), nil when not dragging to close.
     fileprivate var dismissInteractionController: UIPercentDrivenInteractiveTransition?
     fileprivate var isInteractivelyDismissing: Bool = false
@@ -211,8 +212,9 @@ open class SKPhotoBrowser: UIViewController {
         if let panGesture = panGesture {
             view.removeGestureRecognizer(panGesture)
         }
-        let longpressGesture = UILongPressGestureRecognizer.init()
-        view.removeGestureRecognizer(longpressGesture)
+        if let longPressGesture = longPressGesture {
+            view.removeGestureRecognizer(longPressGesture)
+        }
         NSObject.cancelPreviousPerformRequests(withTarget: self)
     }
     
@@ -268,7 +270,7 @@ open class SKPhotoBrowser: UIViewController {
             self.hideControlsAfterDelay()
             self.activityViewController = nil
         }
-        if UI_USER_INTERFACE_IDIOM() == .phone {
+        if UIDevice.current.userInterfaceIdiom == .phone {
             present(activityViewController, animated: true, completion: nil)
         } else {
             activityViewController.modalPresentationStyle = .popover
@@ -525,7 +527,7 @@ internal extension SKPhotoBrowser {
                     let items: [Any] = [data as Any]
                     let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
 
-                    if UI_USER_INTERFACE_IDIOM() == .phone {
+                    if UIDevice.current.userInterfaceIdiom == .phone {
                         self.present(activityViewController, animated: true, completion: nil)
                     } else {
                         activityViewController.popoverPresentationController?.sourceView = self.view
@@ -538,7 +540,7 @@ internal extension SKPhotoBrowser {
                     
                     let items: Array = [image]
                     let activityViewController:UIActivityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
-                    if UI_USER_INTERFACE_IDIOM() == .phone {
+                    if UIDevice.current.userInterfaceIdiom == .phone {
                         self.present(activityViewController, animated: true, completion: nil)
                     } else {
                         activityViewController.popoverPresentationController?.sourceView = self.view
@@ -638,7 +640,7 @@ internal extension SKPhotoBrowser {
                 }))
             }
             
-            if UI_USER_INTERFACE_IDIOM() == .phone {
+            if UIDevice.current.userInterfaceIdiom == .phone {
                 present(actionSheetController, animated: true, completion: nil)
             } else {
                 actionSheetController.modalPresentationStyle = .popover
@@ -718,10 +720,12 @@ private extension SKPhotoBrowser {
             pagingScrollView.panGestureRecognizer.require(toFail: panGesture)
         }
         
-        let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
-        longPressRecognizer.minimumPressDuration = 0.5
-        longPressRecognizer.delaysTouchesBegan = false
-        self.view.addGestureRecognizer(longPressRecognizer)
+        longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
+        longPressGesture?.minimumPressDuration = 0.5
+        longPressGesture?.delaysTouchesBegan = false
+        if let longPressRecognizer = longPressGesture {
+            view.addGestureRecognizer(longPressRecognizer)
+        }
     }
     
     func configureActionView() {

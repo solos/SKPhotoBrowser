@@ -42,7 +42,6 @@ open class SKZoomingScrollView: UIScrollView {
     convenience init(frame: CGRect, browser: SKPhotoBrowser) {
         self.init(frame: frame)
         self.browser = browser
-        setup()
     }
     
     deinit {
@@ -132,7 +131,8 @@ open class SKZoomingScrollView: UIScrollView {
             maxScale = 2.5
         } else if imageView.frame.width < deviceScreenWidth {
             // I think that we should to get coefficient between device screen width and image width and assign it to maxScale. I made two mode that we will get the same result for different device orientations.
-            if UIApplication.shared.statusBarOrientation.isPortrait {
+            let isPortrait = bounds.size.height >= bounds.size.width
+            if isPortrait {
                 maxScale = deviceScreenHeight / imageView.frame.width
             } else {
                 maxScale = deviceScreenWidth / imageView.frame.width

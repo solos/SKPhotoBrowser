@@ -111,12 +111,12 @@ class SKDefaultImageCache: SKImageCacheable {
     }
     
     func setData(_ imageData: Data, forKey key: String) {
-        if key.lowercased().hasSuffix(".gif"){
-            let image = UIImage.gif(data: imageData)
-            cache.setObject(image!, forKey: key as AnyObject)
-        } else {
-            let image = UIImage.init(data: imageData)
-            cache.setObject(image!, forKey: key as AnyObject)
+        if key.lowercased().hasSuffix(".gif") {
+            if let image = UIImage.gif(data: imageData) {
+                cache.setObject(image, forKey: key as AnyObject)
+            }
+        } else if let image = UIImage(data: imageData) {
+            cache.setObject(image, forKey: key as AnyObject)
         }
     }
     
