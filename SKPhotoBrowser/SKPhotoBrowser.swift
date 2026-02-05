@@ -603,7 +603,9 @@ internal extension SKPhotoBrowser {
 
         case .ended, .cancelled:
             let dismissThreshold: CGFloat = 0.15
-            let shouldDismiss = (progress > dismissThreshold || abs(velocity.y) > velocityThreshold) && translation.y > 0
+            // 显著降低速度门槛，即使只滑了一点点，只要有向下的甩动动作就关闭
+            let quickSwipeThreshold: CGFloat = 250 
+            let shouldDismiss = (progress > dismissThreshold || velocity.y > quickSwipeThreshold) && translation.y > 0
 
             if shouldDismiss {
                 dismissInteractionController?.finish()
@@ -717,7 +719,7 @@ private extension SKPhotoBrowser {
         }
         
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
-        longPressRecognizer.minimumPressDuration = 0.5
+        longPressRecognizer.MinimumPressDuration = 0.5
         longPressRecognizer.delaysTouchesBegan = false
         self.view.addGestureRecognizer(longPressRecognizer)
     }
