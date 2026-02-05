@@ -14,6 +14,10 @@ public let SKPHOTO_LOADING_DID_END_NOTIFICATION = "photoLoadingDidEndNotificatio
 // MARK: - SKPhotoBrowser
 open class SKPhotoBrowser: UIViewController {
     // open function
+    // MARK: - Interactive Dismiss Support
+    private var interactiveDismissSnapshot: UIView?
+    private var interactiveDismissOriginFrame: CGRect = .zero
+    private var isInteractivelyDismissing = false
     open var currentPageIndex: Int = 0
     open var initPageIndex: Int = 0
     open var activityItemProvider: UIActivityItemProvider?
@@ -570,26 +574,36 @@ internal extension SKPhotoBrowser {
             }
         }
     }
-    
-    @objc func panGestureRecognized(_ sender: UIPanGestureRecognizer) {
-        guard let zoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
-            return
-        }
 
+    @objc private func panGestureRecognized(_ sender: UIPanGestureRecognizer) {
+        guard let zoomingScrollView = pageDisplayedAtIndex(currentPageIndex) else { return }
+        
         let translation = sender.translation(in: view)
         let velocity = sender.velocity(in: view)
-        let screenHeight = view.bounds.height
-
-        // 与系统相册一致：进度与下滑距离挂钩，图像跟随手指（约拖半屏即可接近 100%）
-        let dragDistanceForFullDismiss = screenHeight * 0.5
-        let rawProgress = translation.y > 0 ? translation.y / dragDistanceForFullDismiss : 0
-        let progress = min(max(rawProgress, 0), 1)
-
+        
         switch sender.state {
         case .began:
-            if translation.y > 0 {
+            // 只有向下拖动且允许关闭时才启动
+            if translation.y > 0 && shouldAllowPanToDismiss(for: zoomingScrollView) {
                 hideControls()
                 setNeedsStatusBarAppearanceUpdate()
+                
+                // 创建 origin frame（目标缩小位置）
+                let originView = delegate?.viewForPhoto?(self, index: currentPageIndex) ?? animator.senderViewForAnimation ?? view
+                interactiveDismissOriginFrame = calcOriginFrame(originView)
+                
+                // 创建快照视图
+                guard let snapshot = zoomingScrollView.imageView.snapshotView(afterScreenUpdates: true) else {
+                    return
+                }
+                interactiveDismissSnapshot = snapshot
+                
+                // 添加到主视图，并隐藏原图
+                view.addSubview(snapshot)
+                snapshot.frame = zoomingScrollView.imageView.convert(zoomingScrollView.imageView.bounds, to: view)
+                zoomingScrollView.imageView.alpha = 0
+                
+                // 标记状态
                 isInteractivelyDismissing = true
                 let controller = UIPercentDrivenInteractiveTransition()
                 controller.completionCurve = .easeOut
@@ -598,35 +612,72 @@ internal extension SKPhotoBrowser {
             }
 
         case .changed:
+            guard let snapshot = interactiveDismissSnapshot, isInteractivelyDismissing else { return }
+            
             if translation.y > 0 {
+                let progress = min(max(translation.y / (view.bounds.height * 0.6), 0), 1)
                 dismissInteractionController?.update(progress)
+                
+                // 计算目标中心点（向 origin view 中心靠拢）
+                let targetCenter = CGPoint(
+                    x: interactiveDismissOriginFrame.midX,
+                    y: interactiveDismissOriginFrame.midY + translation.y
+                )
+                snapshot.center = targetCenter
+                
+                // 缩放：从 1.0 → 0.92
+                let scale = 0.92 + (1.0 - 0.92) * (1 - progress)
+                snapshot.transform = CGAffineTransform(scaleX: scale, y: scale)
+                
+                // 背景透明度
+                view.backgroundColor = bgColor.withAlphaComponent(1 - progress * 0.7)
             } else {
+                // 向上拖动：取消进度
                 dismissInteractionController?.update(0)
+                snapshot.center = CGPoint(
+                    x: view.center.x,
+                    y: view.center.y + translation.y
+                )
+                snapshot.transform = .identity
+                view.backgroundColor = bgColor
             }
 
         case .ended, .cancelled:
-            let dismissThreshold: CGFloat = 0.22
-            let quickSwipeVelocity: CGFloat = 180
-            let shouldDismiss = (progress >= dismissThreshold || velocity.y > quickSwipeVelocity) && translation.y > 0
-
-            if let controller = dismissInteractionController {
-                if shouldDismiss {
-                    prepareForClosePhotoBrowser()
-                    controller.completionSpeed = 0.85
-                    controller.finish()
-                } else {
-                    controller.completionSpeed = 0.4
-                    controller.cancel()
-                    isInteractivelyDismissing = false
-                    showButtons()
+            defer {
+                // 清理资源
+                interactiveDismissSnapshot?.removeFromSuperview()
+                interactiveDismissSnapshot = nil
+                if let scrollView = pageDisplayedAtIndex(currentPageIndex) {
+                    scrollView.imageView.alpha = 1
                 }
+                view.backgroundColor = bgColor
+                isInteractivelyDismissing = false
+                setNeedsStatusBarAppearanceUpdate()
+            }
+            
+            guard isInteractivelyDismissing, let controller = dismissInteractionController else {
+                showButtons()
+                return
+            }
+            
+            let progress = min(max(translation.y / (view.bounds.height * 0.6), 0), 1)
+            let velocityThreshold: CGFloat = 800
+            let shouldDismiss = (progress > 0.3 || abs(velocity.y) > velocityThreshold) && translation.y > 0
+            
+            if shouldDismiss {
+                prepareForClosePhotoBrowser()
+                controller.finish()
+            } else {
+                controller.cancel()
+                showButtons()
             }
             dismissInteractionController = nil
-            setNeedsStatusBarAppearanceUpdate()
 
-        default: break
+        default:
+            break
         }
     }
+    
     
     @objc func actionButtonPressed(ignoreAndShare: Bool) {
         delegate?.willShowActionSheet?(currentPageIndex)
