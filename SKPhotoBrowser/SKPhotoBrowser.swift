@@ -719,7 +719,7 @@ private extension SKPhotoBrowser {
         }
         
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
-        longPressRecognizer.MinimumPressDuration = 0.5
+        longPressRecognizer.minimumPressDuration = 0.5
         longPressRecognizer.delaysTouchesBegan = false
         self.view.addGestureRecognizer(longPressRecognizer)
     }
