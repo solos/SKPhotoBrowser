@@ -678,12 +678,13 @@ internal extension SKPhotoBrowser {
 // MARK: - Private Function
 private extension SKPhotoBrowser {
     func shouldAllowPanToDismiss(for zoomingScrollView: SKZoomingScrollView) -> Bool {
-        let imageViewHeight = zoomingScrollView.imageView.frame.height
-        let screenHeight = view.bounds.height
-        if imageViewHeight < screenHeight * 0.8 {
-            return true
+        if zoomingScrollView.zoomScale > 1.0 {
+            return false
         }
-        return imageViewHeight <= screenHeight
+        if zoomingScrollView.contentOffset.y > 0 {
+            return false
+        }
+        return true
     }
 
     func configureAppearance() {
@@ -813,17 +814,20 @@ extension SKPhotoBrowser: UIGestureRecognizerDelegate {
               let zoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
             return true
         }
-        guard zoomingScrollView.zoomScale == 1 else { return false }
+        
         guard shouldAllowPanToDismiss(for: zoomingScrollView) else { return false }
 
         let velocity = pan.velocity(in: view)
         let translation = pan.translation(in: view)
+        
+        // Only allow swipe down
         if translation.y <= 0 { return false }
 
         let absVx = abs(velocity.x)
         let absVy = abs(velocity.y)
-        if absVx < 30 && absVy < 30 { return true }
-        return absVy >= absVx * 0.8
+        
+        // If it's more horizontal than vertical, don't start
+        return absVy > absVx
     }
 
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
