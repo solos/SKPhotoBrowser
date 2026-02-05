@@ -576,25 +576,29 @@ internal extension SKPhotoBrowser {
 
         let translation = sender.translation(in: view)
         let velocity = sender.velocity(in: view)
-
         let imageViewHeight = zoomingScrollView.imageView.frame.height
-        let visibleImageHeight = min(imageViewHeight, view.bounds.height)
-        let progress = min(abs(translation.y) / max(visibleImageHeight, 1), 1)
+        let screenHeight = view.bounds.height
+        let baseThreshold: CGFloat = min(screenHeight * 0.4, max(screenHeight * 0.2, imageViewHeight * 1.2))
+        let progress = min(abs(translation.y) / max(baseThreshold, 100), 1)
+        let velocityThreshold: CGFloat = 400
 
         switch sender.state {
         case .began:
-            hideControls()
-            setNeedsStatusBarAppearanceUpdate()
-            isInteractivelyDismissing = true
-            dismissInteractionController = UIPercentDrivenInteractiveTransition()
-            startInteractiveDismiss()
+            if translation.y > 0 {
+                hideControls()
+                setNeedsStatusBarAppearanceUpdate()
+                isInteractivelyDismissing = true
+                dismissInteractionController = UIPercentDrivenInteractiveTransition()
+                startInteractiveDismiss()
+            }
 
         case .changed:
-            dismissInteractionController?.update(progress)
+            if translation.y > 0 {
+                dismissInteractionController?.update(progress)
+            }
 
         case .ended, .cancelled:
-            let dismissThreshold = max(0.08, min(0.15, visibleImageHeight / view.bounds.height * 0.15))
-            let velocityThreshold: CGFloat = 100
+            let dismissThreshold: CGFloat = 0.15
             let shouldDismiss = (progress > dismissThreshold || abs(velocity.y) > velocityThreshold) && translation.y > 0
 
             if shouldDismiss {
@@ -602,6 +606,7 @@ internal extension SKPhotoBrowser {
             } else {
                 dismissInteractionController?.cancel()
                 isInteractivelyDismissing = false
+                showButtons()
             }
             dismissInteractionController = nil
             setNeedsStatusBarAppearanceUpdate()
@@ -668,6 +673,15 @@ internal extension SKPhotoBrowser {
 
 // MARK: - Private Function
 private extension SKPhotoBrowser {
+    func shouldAllowPanToDismiss(for zoomingScrollView: SKZoomingScrollView) -> Bool {
+        let imageViewHeight = zoomingScrollView.imageView.frame.height
+        let screenHeight = view.bounds.height
+        if imageViewHeight < screenHeight * 0.8 {
+            return true
+        }
+        return imageViewHeight <= screenHeight
+    }
+
     func configureAppearance() {
         view.backgroundColor = bgColor
         view.clipsToBounds = true
@@ -796,12 +810,16 @@ extension SKPhotoBrowser: UIGestureRecognizerDelegate {
             return true
         }
         guard zoomingScrollView.zoomScale == 1 else { return false }
+        guard shouldAllowPanToDismiss(for: zoomingScrollView) else { return false }
+
         let velocity = pan.velocity(in: view)
+        let translation = pan.translation(in: view)
+        if translation.y <= 0 { return false }
+
         let absVx = abs(velocity.x)
         let absVy = abs(velocity.y)
-        // When velocity is near zero (e.g. start of drag), allow so low-height image can still dismiss
-        if absVx < 50 && absVy < 50 { return true }
-        return absVy >= absVx
+        if absVx < 30 && absVy < 30 { return true }
+        return absVy >= absVx * 0.8
     }
 
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
