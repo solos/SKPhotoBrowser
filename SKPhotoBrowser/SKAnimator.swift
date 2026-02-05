@@ -29,6 +29,8 @@ class SKAnimator: NSObject, SKPhotoBrowserAnimatorDelegate {
     internal var senderOriginImage: UIImage!
     internal var senderViewOriginalFrame: CGRect = .zero
     internal var senderViewForAnimation: UIView?
+    /// Stored to restore origin view when browser dismisses (gray placeholder while presented).
+    internal var senderViewOriginalBackgroundColor: UIColor?
     
     fileprivate var animationDuration: TimeInterval {
         if SKPhotoBrowserOptions.bounceAnimation { return 0.5 }

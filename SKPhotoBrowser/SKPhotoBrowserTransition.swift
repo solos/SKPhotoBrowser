@@ -64,6 +64,9 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
             return
         }
 
+        toVC.animator.senderViewOriginalBackgroundColor = sender.backgroundColor
+        sender.backgroundColor = UIColor(white: 0.92, alpha: 1)
+
         toVC.view.alpha = 0
         toVC.view.layoutIfNeeded()
 
@@ -102,7 +105,7 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
 
 final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
-        SKPhotoBrowserOptions.bounceAnimation ? 0.58 : 0.42
+        SKPhotoBrowserOptions.bounceAnimation ? 0.65 : 0.52
     }
 
     func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
@@ -156,22 +159,26 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
         let cleanup = {
             transitionView.removeFromSuperview()
             zoomingScrollView.isHidden = false
+            if let origin = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex) ?? fromVC.animator.senderViewForAnimation {
+                origin.backgroundColor = fromVC.animator.senderViewOriginalBackgroundColor ?? .clear
+            }
+            fromVC.animator.senderViewOriginalBackgroundColor = nil
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
         }
 
         if SKPhotoBrowserOptions.bounceAnimation {
-            let damping: CGFloat = 0.82
-            UIView.animate(withDuration: duration * 0.7, delay: 0, options: .curveEaseIn, animations: {
+            let damping: CGFloat = 0.86
+            UIView.animate(withDuration: duration * 0.75, delay: 0, options: .curveEaseIn, animations: {
                 fromVC.view.alpha = 0
             })
-            UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0.3, options: .curveEaseOut, animations: {
+            UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0.2, options: .curveEaseOut, animations: {
                 transitionView.frame = finalFrame
             }, completion: { _ in cleanup() })
         } else {
-            UIView.animate(withDuration: duration * 0.65, delay: 0, options: .curveEaseIn, animations: {
+            UIView.animate(withDuration: duration * 0.7, delay: 0, options: .curveEaseIn, animations: {
                 fromVC.view.alpha = 0
             })
-            UIView.animate(withDuration: duration, delay: 0, options: .curveEaseInOut, animations: {
+            UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
                 transitionView.frame = finalFrame
             }, completion: { _ in cleanup() })
         }

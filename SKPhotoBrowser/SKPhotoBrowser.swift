@@ -578,11 +578,11 @@ internal extension SKPhotoBrowser {
             view.backgroundColor = bgColor.withAlphaComponent(1 - progress)
 
         case .ended, .cancelled:
-            let shouldDismiss = progress > 0.2 || velocity.y > 400 || velocity.y < -400
+            let shouldDismiss = progress > 0.15 || velocity.y > 200 || velocity.y < -200
             if shouldDismiss {
                 determineAndClose()
             } else {
-                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut) {
+                UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: .curveEaseOut) {
                     zoomingScrollView.transform = .identity
                     self.view.backgroundColor = self.bgColor
                 }
