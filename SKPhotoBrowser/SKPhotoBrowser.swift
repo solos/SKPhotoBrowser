@@ -595,6 +595,10 @@ internal extension SKPhotoBrowser {
         case .changed:
             if translation.y > 0 {
                 dismissInteractionController?.update(progress)
+            } else if translation.y < 0 {
+                // If it was already interactively dismissing, we should update it
+                // but usually translation.y > 0 is required to start
+                dismissInteractionController?.update(0)
             }
 
         case .ended, .cancelled:
