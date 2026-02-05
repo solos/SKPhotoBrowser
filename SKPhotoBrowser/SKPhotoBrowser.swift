@@ -12,13 +12,6 @@ import Photos
 public let SKPHOTO_LOADING_DID_END_NOTIFICATION = "photoLoadingDidEndNotification"
 
 
-private func calcOriginFrame(_ sender: UIView) -> CGRect {
-    if let window = view.window {
-        return sender.convert(sender.bounds, to: window)
-    }
-    return sender.frame
-}
-
 // MARK: - SKPhotoBrowser
 open class SKPhotoBrowser: UIViewController {
     // open function
@@ -103,6 +96,14 @@ open class SKPhotoBrowser: UIViewController {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+
+    private func calcOriginFrame(_ sender: UIView) -> CGRect {
+        if let window = view.window {
+            return sender.convert(sender.bounds, to: window)
+        }
+        return sender.frame
     }
     
     func setup() {
