@@ -34,6 +34,9 @@ open class SKPhotoBrowser: UIViewController {
     // actions
     fileprivate var activityViewController: UIActivityViewController!
     internal var panGesture: UIPanGestureRecognizer?
+    /// Interactive dismiss (UIPercentDrivenInteractiveTransition), nil when not dragging to close.
+    fileprivate var dismissInteractionController: UIPercentDrivenInteractiveTransition?
+    fileprivate var isInteractivelyDismissing: Bool = false
     
     // for status check property
     fileprivate var isEndAnimationByToolBar: Bool = true
@@ -227,6 +230,15 @@ open class SKPhotoBrowser: UIViewController {
     open func determineAndClose() {
         delegate?.willDismissAtPageIndex?(self.currentPageIndex)
         dismissPhotoBrowser(animated: true)
+    }
+
+    /// Start dismiss without removing gestures; used for interactive pan-to-dismiss. Completion runs when transition ends.
+    fileprivate func startInteractiveDismiss(completion: (() -> Void)? = nil) {
+        delegate?.willDismissAtPageIndex?(self.currentPageIndex)
+        dismiss(animated: true) {
+            completion?()
+            self.delegate?.didDismissAtPageIndex?(self.currentPageIndex)
+        }
     }
     
     open func popupShare(includeCaption: Bool = true) {
@@ -558,7 +570,7 @@ internal extension SKPhotoBrowser {
     }
     
     @objc func panGestureRecognized(_ sender: UIPanGestureRecognizer) {
-        guard let zoomingScrollView: SKZoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
+        guard pagingScrollView.pageDisplayedAtIndex(currentPageIndex) != nil else {
             return
         }
 
@@ -571,23 +583,23 @@ internal extension SKPhotoBrowser {
         case .began:
             hideControls()
             setNeedsStatusBarAppearanceUpdate()
+            isInteractivelyDismissing = true
+            dismissInteractionController = UIPercentDrivenInteractiveTransition()
+            startInteractiveDismiss()
 
         case .changed:
-            let scale = max(0.5, 1 - progress)
-            zoomingScrollView.transform = CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: translation.x, y: translation.y)
-            view.backgroundColor = bgColor.withAlphaComponent(1 - progress)
+            dismissInteractionController?.update(progress)
 
         case .ended, .cancelled:
             let shouldDismiss = progress > 0.12 || velocity.y > 120 || velocity.y < -120
             if shouldDismiss {
-                determineAndClose()
+                dismissInteractionController?.finish()
             } else {
-                UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: .curveEaseOut) {
-                    zoomingScrollView.transform = .identity
-                    self.view.backgroundColor = self.bgColor
-                }
-                setNeedsStatusBarAppearanceUpdate()
+                dismissInteractionController?.cancel()
+                isInteractivelyDismissing = false
             }
+            dismissInteractionController = nil
+            setNeedsStatusBarAppearanceUpdate()
 
         default: break
         }
@@ -763,6 +775,10 @@ extension SKPhotoBrowser: UIViewControllerTransitioningDelegate {
 
     public func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
         return SKPhotoBrowserDismissAnimator()
+    }
+
+    public func interactionControllerForDismissal(using animator: UIViewControllerAnimatedTransitioning) -> UIViewControllerInteractiveTransitioning? {
+        return isInteractivelyDismissing ? dismissInteractionController : nil
     }
 }
 

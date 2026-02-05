@@ -151,7 +151,7 @@ class SKPagingScrollView: UIScrollView {
             
             visiblePages.append(page)
             addSubview(page)
-            if let ourPan = browser?.panGesture {
+            if let ourPan = browser.panGesture {
                 page.panGestureRecognizer.require(toFail: ourPan)
             }
             
