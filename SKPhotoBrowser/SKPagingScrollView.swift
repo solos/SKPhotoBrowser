@@ -151,6 +151,9 @@ class SKPagingScrollView: UIScrollView {
             
             visiblePages.append(page)
             addSubview(page)
+            if let ourPan = browser?.panGesture {
+                page.panGestureRecognizer.require(toFail: ourPan)
+            }
             
             // if exists caption, insert
             if let captionView: SKCaptionView = createCaptionView(index) {

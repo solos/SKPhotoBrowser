@@ -33,7 +33,7 @@ open class SKPhotoBrowser: UIViewController {
     
     // actions
     fileprivate var activityViewController: UIActivityViewController!
-    fileprivate var panGesture: UIPanGestureRecognizer?
+    internal var panGesture: UIPanGestureRecognizer?
     
     // for status check property
     fileprivate var isEndAnimationByToolBar: Bool = true
@@ -578,7 +578,7 @@ internal extension SKPhotoBrowser {
             view.backgroundColor = bgColor.withAlphaComponent(1 - progress)
 
         case .ended, .cancelled:
-            let shouldDismiss = progress > 0.15 || velocity.y > 200 || velocity.y < -200
+            let shouldDismiss = progress > 0.12 || velocity.y > 120 || velocity.y < -120
             if shouldDismiss {
                 determineAndClose()
             } else {
