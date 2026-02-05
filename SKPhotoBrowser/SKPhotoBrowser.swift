@@ -564,7 +564,8 @@ internal extension SKPhotoBrowser {
 
         let translation = sender.translation(in: view)
         let velocity = sender.velocity(in: view)
-        let progress = min(max(translation.y / view.bounds.height, 0), 1)
+        let height = view.bounds.height
+        let progress = min(abs(translation.y) / height, 1)
 
         switch sender.state {
         case .began:
@@ -577,7 +578,8 @@ internal extension SKPhotoBrowser {
             view.backgroundColor = bgColor.withAlphaComponent(1 - progress)
 
         case .ended, .cancelled:
-            if progress > 0.2 || velocity.y > 800 {
+            let shouldDismiss = progress > 0.2 || velocity.y > 400 || velocity.y < -400
+            if shouldDismiss {
                 determineAndClose()
             } else {
                 UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut) {
@@ -674,6 +676,8 @@ private extension SKPhotoBrowser {
         
         if let panGesture = panGesture {
             view.addGestureRecognizer(panGesture)
+            // Let our vertical-dismiss pan get first chance; horizontal paging only when our pan fails
+            pagingScrollView.panGestureRecognizer.require(toFail: panGesture)
         }
         
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(SKPhotoBrowser.longpress(_:)))
