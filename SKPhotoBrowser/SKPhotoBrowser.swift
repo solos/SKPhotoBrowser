@@ -200,6 +200,13 @@ open class SKPhotoBrowser: UIViewController {
             if hasImage || hasLivePhoto {
                 page.displayImage(complete: true)
                 self.loadAdjacentPhotosIfNecessary(photo)
+                // If the loaded photo is on the current page, auto-play live photo
+                // (handles the async remote-download path where viewDidAppear already fired)
+                if page === self.pagingScrollView.pageDisplayedAtIndex(self.currentPageIndex) {
+                    DispatchQueue.main.async {
+                        self.autoPlayLivePhotoIfNeeded(at: self.currentPageIndex)
+                    }
+                }
             } else {
                 page.displayImageFailure()
             }

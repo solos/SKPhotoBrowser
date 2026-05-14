@@ -186,25 +186,33 @@ open class SKZoomingScrollView: UIScrollView {
     open func displayLivePhoto(_ livePhoto: PHLivePhoto) {
         indicatorView.stopAnimating()
 
-        let photoSize = livePhoto.size
-        let livePhotoFrame = CGRect(origin: .zero, size: photoSize)
+        // Use underlyingImage.size for consistency with displayImage; fall back to livePhoto.size
+        let baseSize: CGSize = photo?.underlyingImage?.size ?? livePhoto.size
+        var frameSize = baseSize
+        if SKPhotoBrowserOptions.longPhotoWidthMatchScreen && baseSize.height >= baseSize.width, baseSize.width > 0 {
+            let imageHeight = SKMesurement.screenWidth / baseSize.width * baseSize.height
+            frameSize = CGSize(width: SKMesurement.screenWidth, height: imageHeight)
+        }
+        let livePhotoFrame = CGRect(origin: .zero, size: frameSize)
 
         // Keep imageView frame in sync so zoom calculations stay correct
         imageView.frame = livePhotoFrame
         imageView.isHidden = true
 
+        let contentMode = photo?.contentMode ?? .scaleAspectFit
         if livePhotoView == nil {
             let lpv = PHLivePhotoView(frame: livePhotoFrame)
-            lpv.contentMode = .scaleAspectFit
+            lpv.contentMode = contentMode
             lpv.backgroundColor = .clear
             insertSubview(lpv, aboveSubview: imageView)
             livePhotoView = lpv
         } else {
             livePhotoView?.frame = livePhotoFrame
+            livePhotoView?.contentMode = contentMode
         }
         (livePhotoView as? PHLivePhotoView)?.livePhoto = livePhoto
 
-        contentSize = photoSize
+        contentSize = frameSize
         setMaxMinZoomScalesForCurrentBounds()
         setNeedsLayout()
     }
