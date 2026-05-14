@@ -40,6 +40,10 @@ public struct SKPhotoBrowserOptions {
     public static var swapCloseAndDeleteButtons: Bool = false
     public static var disableVerticalSwipe: Bool = false
 
+    /// When true, Live Photos automatically start playback when they become the current page.
+    /// Default: true
+    public static var autoPlayLivePhoto: Bool = true
+
     /// if this value is true, the long photo width will match the screen,
     /// and the minScale is 1.0, the maxScale is 2.5
     /// Default: false

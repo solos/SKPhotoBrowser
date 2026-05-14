@@ -7,6 +7,8 @@
 //
 
 import UIKit
+import Photos
+import PhotosUI
 
 open class SKZoomingScrollView: UIScrollView {
     var captionView: SKCaptionView!
@@ -28,6 +30,7 @@ open class SKZoomingScrollView: UIScrollView {
     fileprivate(set) var imageView: SKDetectingImageView!
     fileprivate var tapView: SKDetectingView!
     fileprivate var indicatorView: SKIndicatorView!
+    fileprivate(set) var livePhotoView: UIView?  // PHLivePhotoView on iOS 9.1+
     
     required public init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
@@ -84,7 +87,8 @@ open class SKZoomingScrollView: UIScrollView {
         super.layoutSubviews()
         
         let boundsSize = bounds.size
-        var frameToCenter = imageView.frame
+        let activeView: UIView = livePhotoView ?? imageView
+        var frameToCenter = activeView.frame
         
         // horizon
         if frameToCenter.size.width < boundsSize.width {
@@ -100,8 +104,8 @@ open class SKZoomingScrollView: UIScrollView {
         }
         
         // Center
-        if !imageView.frame.equalTo(frameToCenter) {
-            imageView.frame = frameToCenter
+        if !activeView.frame.equalTo(frameToCenter) {
+            activeView.frame = frameToCenter
         }
     }
     
@@ -110,12 +114,13 @@ open class SKZoomingScrollView: UIScrollView {
         minimumZoomScale = 1
         zoomScale = 1
         
-        guard let imageView = imageView else {
+        let activeView: UIView = livePhotoView ?? imageView
+        guard activeView.frame.size != .zero else {
             return
         }
         
         let boundsSize = bounds.size
-        let imageSize = imageView.frame.size
+        let imageSize = activeView.frame.size
         
         let xScale = boundsSize.width / imageSize.width
         let yScale = boundsSize.height / imageSize.height
@@ -167,10 +172,55 @@ open class SKZoomingScrollView: UIScrollView {
         photo = nil
         if captionView != nil {
             captionView.removeFromSuperview()
-            captionView = nil 
+            captionView = nil
         }
+        if #available(iOS 9.1, *) {
+            stopLivePhoto()
+        }
+        livePhotoView?.removeFromSuperview()
+        livePhotoView = nil
+        imageView.isHidden = false
     }
     
+    @available(iOS 9.1, *)
+    open func displayLivePhoto(_ livePhoto: PHLivePhoto) {
+        indicatorView.stopAnimating()
+
+        let photoSize = livePhoto.size
+        let livePhotoFrame = CGRect(origin: .zero, size: photoSize)
+
+        // Keep imageView frame in sync so zoom calculations stay correct
+        imageView.frame = livePhotoFrame
+        imageView.isHidden = true
+
+        if livePhotoView == nil {
+            let lpv = PHLivePhotoView(frame: livePhotoFrame)
+            lpv.contentMode = .scaleAspectFit
+            lpv.backgroundColor = .clear
+            insertSubview(lpv, aboveSubview: imageView)
+            livePhotoView = lpv
+        } else {
+            livePhotoView?.frame = livePhotoFrame
+        }
+        (livePhotoView as? PHLivePhotoView)?.livePhoto = livePhoto
+
+        contentSize = photoSize
+        setMaxMinZoomScalesForCurrentBounds()
+        setNeedsLayout()
+    }
+
+    /// Start Live Photo playback (full loop including audio).
+    @available(iOS 9.1, *)
+    open func playLivePhoto() {
+        (livePhotoView as? PHLivePhotoView)?.startPlayback(with: .full)
+    }
+
+    /// Stop Live Photo playback.
+    @available(iOS 9.1, *)
+    open func stopLivePhoto() {
+        (livePhotoView as? PHLivePhotoView)?.stopPlayback()
+    }
+
     open func displayImage(_ image: UIImage) {
         // image
         imageView.image = image
@@ -207,12 +257,20 @@ open class SKZoomingScrollView: UIScrollView {
             indicatorView.stopAnimating()
         }
         
-        if let image = photo.underlyingImage, photo != nil {
+        if #available(iOS 9.1, *), let livePhoto = photo as? SKLivePhoto {
+            if let phpLivePhoto = livePhoto.livePhoto {
+                displayLivePhoto(phpLivePhoto)
+            } else if let image = livePhoto.underlyingImage {
+                displayImage(image)
+            } else {
+                contentSize = CGSize.zero
+            }
+        } else if let image = photo.underlyingImage, photo != nil {
             displayImage(image)
-		} else {
-			// change contentSize will reset contentOffset, so only set the contentsize zero when the image is nil
-			contentSize = CGSize.zero
-		}
+        } else {
+            // change contentSize will reset contentOffset, so only set the contentsize zero when the image is nil
+            contentSize = CGSize.zero
+        }
         setNeedsLayout()
     }
     
@@ -250,7 +308,7 @@ open class SKZoomingScrollView: UIScrollView {
 
 extension SKZoomingScrollView: UIScrollViewDelegate {
     public func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        return imageView
+        return livePhotoView ?? imageView
     }
     
     public func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {

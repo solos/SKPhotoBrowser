@@ -166,6 +166,9 @@ open class SKPhotoBrowser: UIViewController {
     override open func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(true)
         isViewActive = true
+        if SKPhotoBrowserOptions.autoPlayLivePhoto {
+            autoPlayLivePhotoIfNeeded(at: currentPageIndex)
+        }
     }
     
     override open var prefersStatusBarHidden: Bool {
@@ -404,6 +407,13 @@ internal extension SKPhotoBrowser {
     
     func pageDisplayedAtIndex(_ index: Int) -> SKZoomingScrollView? {
         return pagingScrollView.pageDisplayedAtIndex(index)
+    }
+
+    func autoPlayLivePhotoIfNeeded(at index: Int) {
+        guard let page = pagingScrollView.pageDisplayedAtIndex(index) else { return }
+        if #available(iOS 9.1, *) {
+            page.playLivePhoto()
+        }
     }
     
     func getImageFromView(_ sender: UIView) -> UIImage {
@@ -841,6 +851,9 @@ extension SKPhotoBrowser: UIScrollViewDelegate {
         if currentPageIndex != previousCurrentPage {
             delegate?.didShowPhotoAtIndex?(self, index: currentPageIndex)
             paginationView.update(currentPageIndex)
+            if SKPhotoBrowserOptions.autoPlayLivePhoto {
+                autoPlayLivePhotoIfNeeded(at: currentPageIndex)
+            }
         }
     }
     
