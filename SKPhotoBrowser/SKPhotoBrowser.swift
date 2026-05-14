@@ -190,7 +190,14 @@ open class SKPhotoBrowser: UIViewController {
                 return
             }
             
-            if photo.underlyingImage != nil {
+            let hasImage = photo.underlyingImage != nil
+            let hasLivePhoto: Bool = {
+                if #available(iOS 9.1, *), let lp = photo as? SKLivePhoto {
+                    return lp.livePhoto != nil
+                }
+                return false
+            }()
+            if hasImage || hasLivePhoto {
                 page.displayImage(complete: true)
                 self.loadAdjacentPhotosIfNecessary(photo)
             } else {

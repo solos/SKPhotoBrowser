@@ -84,12 +84,16 @@ open class SKLivePhoto: NSObject, SKPhotoProtocol {
             contentMode: .aspectFit,
             options: liveOptions
         ) { [weak self] livePhoto, info in
-            guard let self = self, let livePhoto = livePhoto else { return }
+            guard let self = self else { return }
             let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
-            if !isDegraded {
+            // Skip intermediate degraded previews; wait for the final result.
+            if isDegraded { return }
+            if let livePhoto = livePhoto {
                 self.livePhoto = livePhoto
-                DispatchQueue.main.async { self.loadUnderlyingImageComplete() }
             }
+            // Always fire completion on the final callback so the browser can
+            // display the static image or show a failure indicator.
+            DispatchQueue.main.async { self.loadUnderlyingImageComplete() }
         }
     }
 
@@ -102,15 +106,19 @@ open class SKLivePhoto: NSObject, SKPhotoProtocol {
         ) { [weak self] livePhoto, info in
             guard let self = self else { return }
             let isDegraded = (info[PHLivePhotoInfoIsDegradedKey] as? Bool) ?? false
-            if !isDegraded, let livePhoto = livePhoto {
+            // Skip intermediate degraded previews; wait for the final result.
+            if isDegraded { return }
+            if let livePhoto = livePhoto {
                 self.livePhoto = livePhoto
                 if self.underlyingImage == nil,
                    let data = try? Data(contentsOf: imageURL),
                    let image = UIImage(data: data) {
                     self.underlyingImage = image
                 }
-                DispatchQueue.main.async { self.loadUnderlyingImageComplete() }
             }
+            // Always fire completion on the final callback so the browser can
+            // display the static image or show a failure indicator.
+            DispatchQueue.main.async { self.loadUnderlyingImageComplete() }
         }
     }
 
