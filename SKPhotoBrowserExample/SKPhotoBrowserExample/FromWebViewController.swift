@@ -65,17 +65,31 @@ class CustomImageCache: SKImageCacheable {
     }
 
     func imageForKey(_ key: String) -> UIImage? {
-        guard let image = cache.imageFromDiskCache(forKey: key) else { return nil }
-        
-        return image
+        if isGIFURL(key), let data = cache.diskImageData(forKey: key) {
+            return UIImage.gif(data: data)
+        }
+        return cache.imageFromDiskCache(forKey: key)
+    }
+
+    func dataForKey(_ key: String) -> Data? {
+        return cache.diskImageData(forKey: key)
     }
 
     func setImage(_ image: UIImage, forKey key: String) {
         cache.store(image, forKey: key)
     }
 
-    func removeImageForKey(_ key: String) {}
+    func setData(_ imageData: Data, forKey key: String) {
+        if isGIFURL(key) {
+            cache.store(nil, recalculateFromImage: false, imageData: imageData, forKey: key, toDisk: true)
+        } else if let image = UIImage(data: imageData) {
+            cache.store(image, forKey: key)
+        }
+    }
+
+    func removeImageForKey(_ key: String) {
+        cache.removeImage(forKey: key)
+    }
     
     func removeAllImages() {}
-    
 }

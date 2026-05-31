@@ -489,7 +489,7 @@ internal extension SKPhotoBrowser {
                 if p != nil {
                     let url = p!.photoURL
                     if url != nil {
-                        if url!.lowercased().hasSuffix(".gif"){
+                        if isGIFURL(url!){
                             let data = SKCache.sharedCache.dataForKey(url!)
                             
                             PHPhotoLibrary.shared().performChanges({
@@ -544,7 +544,7 @@ internal extension SKPhotoBrowser {
         if p != nil {
             let url = p!.photoURL
             if url != nil {
-                if url!.lowercased().hasSuffix(".gif"){
+                if isGIFURL(url!){
                     let data = SKCache.sharedCache.dataForKey(url!)
                     
                     let items: [Any] = [data as Any]
@@ -583,7 +583,7 @@ internal extension SKPhotoBrowser {
         if p != nil {
             let url = p!.photoURL
             if url != nil {
-                if url!.lowercased().hasSuffix(".gif"){
+                if isGIFURL(url!){
                     let data = SKCache.sharedCache.dataForKey(url!)
                     UIPasteboard.general.setData(data!, forPasteboardType: "public.gif")
                 } else {

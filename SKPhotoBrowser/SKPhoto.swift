@@ -26,21 +26,21 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
     open var shouldCachePhotoURLImage: Bool = false
     open var photoURL: String!
 
-    override init() {
+    public override init() {
         super.init()
     }
     
-    convenience init(image: UIImage) {
+    public convenience init(image: UIImage) {
         self.init()
         underlyingImage = image
     }
     
-    convenience init(url: String) {
+    public convenience init(url: String) {
         self.init()
         photoURL = url
     }
     
-    convenience init(url: String, holder: UIImage?) {
+    public convenience init(url: String, holder: UIImage?) {
         self.init()
         photoURL = url
         underlyingImage = holder
@@ -58,10 +58,12 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
             if let url = URL(string: photoURL), let img = SKCache.sharedCache.imageForRequest(URLRequest(url: url)) {
                 underlyingImage = img
             }
-        } else {
-            if let img = SKCache.sharedCache.imageForKey(photoURL) {
-                underlyingImage = img
-            }
+        } else if isGIFURL(photoURL),
+                  let data = SKCache.sharedCache.dataForKey(photoURL),
+                  let image = UIImage.gif(data: data) {
+            underlyingImage = image
+        } else if let img = SKCache.sharedCache.imageForKey(photoURL) {
+            underlyingImage = img
         }
     }
     
@@ -80,19 +82,17 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
             }
 
             guard let data = data, let response = response else { return }
-            let image: UIImage? = photoURL.lowercased().hasSuffix(".gif")
+            let image: UIImage? = isGIFURL(photoURL)
                 ? UIImage.gif(data: data)
                 : UIImage(data: data)
             if let image = image {
                 if self.shouldCachePhotoURLImage {
                     if SKCache.sharedCache.imageCache is SKRequestResponseCacheable {
                         SKCache.sharedCache.setImageData(data, response: response, request: request)
+                    } else if isGIFURL(photoURL) {
+                        SKCache.sharedCache.setData(data, forKey: photoURL)
                     } else {
-                        if photoURL.lowercased().hasSuffix(".gif") {
-                            SKCache.sharedCache.setData(data, forKey: photoURL)
-                        } else {
-                            SKCache.sharedCache.setImage(image, forKey: photoURL)
-                        }
+                        SKCache.sharedCache.setImage(image, forKey: photoURL)
                     }
                 }
                 DispatchQueue.main.async {

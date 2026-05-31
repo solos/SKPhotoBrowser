@@ -9,6 +9,10 @@
 import UIKit
 import ImageIO
 
+public func isGIFURL(_ urlString: String) -> Bool {
+    urlString.lowercased().contains(".gif")
+}
+
 extension UIImageView {
 
     public func loadGif(name: String) {

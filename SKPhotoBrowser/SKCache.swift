@@ -72,8 +72,9 @@ open class SKCache {
     return nil
     }
 
-        if let response = cache.cachedResponseForRequest(request) {
-            if request.url?.absoluteString.lowercased().hasSuffix(".gif") == true {
+        if let response = cache.cachedResponseForRequest(request),
+           let urlString = request.url?.absoluteString {
+            if isGIFURL(urlString) {
                 return UIImage.gif(data: response.data)
             } else {
                 return UIImage(data: response.data)
@@ -103,6 +104,9 @@ class SKDefaultImageCache: SKImageCacheable {
     }
 
     func imageForKey(_ key: String) -> UIImage? {
+        if isGIFURL(key), let data = cache.object(forKey: key as AnyObject) as? Data {
+            return UIImage.gif(data: data)
+        }
         return cache.object(forKey: key as AnyObject) as? UIImage
     }
 
@@ -111,10 +115,8 @@ class SKDefaultImageCache: SKImageCacheable {
     }
     
     func setData(_ imageData: Data, forKey key: String) {
-        if key.lowercased().hasSuffix(".gif") {
-            if let image = UIImage.gif(data: imageData) {
-                cache.setObject(image, forKey: key as AnyObject)
-            }
+        if isGIFURL(key) {
+            cache.setObject(imageData as AnyObject, forKey: key as AnyObject)
         } else if let image = UIImage(data: imageData) {
             cache.setObject(image, forKey: key as AnyObject)
         }

@@ -23,7 +23,7 @@ open class SKLivePhoto: NSObject, SKPhotoProtocol {
     private var imageFileURL: URL?
     private var videoFileURL: URL?
 
-    override init() {
+    public override init() {
         super.init()
     }
 
