@@ -17,7 +17,11 @@ open class SKPhotoBrowser: UIViewController {
     // open function
     // MARK: - Interactive Dismiss Support
     private var interactiveDismissSnapshot: UIView?
+    /// Thumbnail frame in browser view coords — animate the snapshot here on successful dismiss.
     private var interactiveDismissOriginFrame: CGRect = .zero
+    /// Snapshot frame when the pan began (in browser view coords).
+    private var interactiveDismissStartFrame: CGRect = .zero
+    private weak var interactiveDismissMediaView: UIView?
     open var currentPageIndex: Int = 0
     open var initPageIndex: Int = 0
     open var activityItemProvider: UIActivityItemProvider?
@@ -39,8 +43,6 @@ open class SKPhotoBrowser: UIViewController {
     fileprivate var activityViewController: UIActivityViewController!
     internal var panGesture: UIPanGestureRecognizer?
     fileprivate var longPressGesture: UILongPressGestureRecognizer?
-    /// Interactive dismiss (UIPercentDrivenInteractiveTransition), nil when not dragging to close.
-    fileprivate var dismissInteractionController: UIPercentDrivenInteractiveTransition?
     fileprivate var isInteractivelyDismissing: Bool = false
     
     // for status check property
@@ -259,15 +261,6 @@ open class SKPhotoBrowser: UIViewController {
     open func determineAndClose() {
         delegate?.willDismissAtPageIndex?(self.currentPageIndex)
         dismissPhotoBrowser(animated: true)
-    }
-
-    /// Start dismiss without removing gestures; used for interactive pan-to-dismiss. Completion runs when transition ends.
-    fileprivate func startInteractiveDismiss(completion: (() -> Void)? = nil) {
-        delegate?.willDismissAtPageIndex?(self.currentPageIndex)
-        dismiss(animated: true) {
-            completion?()
-            self.delegate?.didDismissAtPageIndex?(self.currentPageIndex)
-        }
     }
     
     open func popupShare(includeCaption: Bool = true) {
@@ -595,117 +588,234 @@ internal extension SKPhotoBrowser {
 
     @objc private func panGestureRecognized(_ sender: UIPanGestureRecognizer) {
         guard let zoomingScrollView = pageDisplayedAtIndex(currentPageIndex) else { return }
-        
+
         let translation = sender.translation(in: view)
         let velocity = sender.velocity(in: view)
-        
+
         switch sender.state {
         case .began:
             guard shouldAllowPanToDismiss(for: zoomingScrollView) else { return }
-            
+
             hideControls()
             isInteractivelyDismissing = true
-            
-            // Calculate origin frame
+
+            if #available(iOS 9.1, *) {
+                zoomingScrollView.stopLivePhoto()
+            }
+
+            // Prefer Live Photo view when present; imageView is hidden in that case.
+            let mediaView: UIView
+            if let livePhotoView = zoomingScrollView.livePhotoView {
+                mediaView = livePhotoView
+            } else {
+                mediaView = zoomingScrollView.imageView
+            }
+            interactiveDismissMediaView = mediaView
+
             var originView = delegate?.viewForPhoto?(self, index: currentPageIndex)
-            // Fallback to animator sender view ONLY if we are at the initial page
             if originView == nil && currentPageIndex == initPageIndex {
                 originView = animator.senderViewForAnimation
             }
-            
             if let originView = originView, let window = originView.window {
                 let rectInWindow = originView.convert(originView.bounds, to: window)
                 interactiveDismissOriginFrame = view.convert(rectInWindow, from: nil)
             } else {
                 interactiveDismissOriginFrame = .zero
             }
-            
-            // Create snapshot
-            guard let snapshot = zoomingScrollView.imageView.snapshotView(afterScreenUpdates: true) else {
+
+            guard let snapshot = mediaView.snapshotView(afterScreenUpdates: false) else {
+                cancelInteractiveDismiss()
                 return
             }
             interactiveDismissSnapshot = snapshot
-            
-            // Setup snapshot frame
-            let frameInView = zoomingScrollView.imageView.convert(zoomingScrollView.imageView.bounds, to: view)
+
+            let frameInView = mediaView.convert(mediaView.bounds, to: view)
+            interactiveDismissStartFrame = frameInView
             snapshot.frame = frameInView
-            snapshot.contentMode = .scaleAspectFill
-            
+            snapshot.clipsToBounds = true
+            snapshot.contentMode = mediaView.contentMode
+
             view.addSubview(snapshot)
-            zoomingScrollView.imageView.isHidden = true
-            
+            mediaView.isHidden = true
+            // Hide the paging strip so adjacent pages don't show through while dragging.
+            pagingScrollView.alpha = 0
+
         case .changed:
             guard isInteractivelyDismissing, let snapshot = interactiveDismissSnapshot else { return }
-            
-            // 1. Follow finger
-            let initialCenter = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-            snapshot.center = CGPoint(x: initialCenter.x + translation.x, y: initialCenter.y + translation.y)
-            
-            // 2. Scale down as you drag (minimum 0.5)
-            // Use translation.y to determine scale factor
-            let progress = max(translation.y / view.bounds.height, 0)
-            let scale = max(0.5, 1 - progress * 1.2)
-            snapshot.transform = CGAffineTransform(scaleX: scale, y: scale)
-            
-            // 3. Fade background
-            // Fade out faster than scaling
-            let alpha = max(0, 1 - progress * 2.0)
-            view.backgroundColor = bgColor.withAlphaComponent(alpha)
-            
+
+            let progress = min(1, max(0, translation.y / max(view.bounds.height, 1)))
+            // Photos-style: shrink as you drag down (floor ~0.55).
+            let scale = max(0.55, 1 - progress * 0.55)
+
+            snapshot.transform = .identity
+            let start = interactiveDismissStartFrame
+            let scaledSize = CGSize(width: start.width * scale, height: start.height * scale)
+            let center = CGPoint(
+                x: start.midX + translation.x,
+                y: start.midY + translation.y
+            )
+            snapshot.frame = CGRect(
+                x: center.x - scaledSize.width / 2,
+                y: center.y - scaledSize.height / 2,
+                width: scaledSize.width,
+                height: scaledSize.height
+            )
+
+            view.backgroundColor = bgColor.withAlphaComponent(max(0, 1 - progress * 1.15))
+
         case .ended, .cancelled:
             guard isInteractivelyDismissing, let snapshot = interactiveDismissSnapshot else { return }
-            
-            let dismissThreshold: CGFloat = 100
-            let velocityThreshold: CGFloat = 800
-            
-            // Dismiss if dragged down enough OR flicked down fast enough
-            let shouldDismiss = (translation.y > dismissThreshold) || (velocity.y > velocityThreshold && translation.y > 0)
-            
+
+            let dismissThreshold: CGFloat = 120
+            let velocityThreshold: CGFloat = 900
+            let shouldDismiss = (translation.y > dismissThreshold)
+                || (velocity.y > velocityThreshold && translation.y > 40)
+
             if shouldDismiss {
-                // Animate to origin (close)
-                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
-                    if self.interactiveDismissOriginFrame != .zero {
-                        snapshot.frame = self.interactiveDismissOriginFrame
-                        snapshot.layer.cornerRadius = 0
-                        if let originView = self.delegate?.viewForPhoto?(self, index: self.currentPageIndex) ?? (self.currentPageIndex == self.initPageIndex ? self.animator.senderViewForAnimation : nil) {
-                           snapshot.layer.cornerRadius = originView.layer.cornerRadius
-                           snapshot.layer.masksToBounds = true
-                        }
-                    } else {
-                        snapshot.alpha = 0
-                        snapshot.transform = CGAffineTransform(scaleX: 0.3, y: 0.3)
-                    }
-                    self.view.backgroundColor = UIColor.clear
-                    self.actionView.alpha = 0 // Ensure other UI elements fade out
-                    self.paginationView.alpha = 0
-                    self.toolbar.alpha = 0
-                }, completion: { _ in
-                    self.dismissPhotoBrowser(animated: false)
-                    snapshot.removeFromSuperview()
-                })
+                finishInteractiveDismiss(snapshot: snapshot)
             } else {
-                // Cancel (snap back)
-                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
-                    snapshot.transform = .identity
-                    snapshot.center = CGPoint(x: self.view.bounds.midX, y: self.view.bounds.midY)
-                    self.view.backgroundColor = self.bgColor
-                }, completion: { _ in
-                    zoomingScrollView.imageView.isHidden = false
-                    snapshot.removeFromSuperview()
-                    self.interactiveDismissSnapshot = nil
-                    self.isInteractivelyDismissing = false
-                    if !self.areControlsHidden() {
-                        self.showButtons()
-                    }
-                })
+                cancelInteractiveDismissAnimation(snapshot: snapshot)
             }
-            
+
         default:
             break
         }
     }
-    
-    
+
+    private func finishInteractiveDismiss(snapshot: UIView) {
+        panGesture?.isEnabled = false
+        delegate?.willDismissAtPageIndex?(currentPageIndex)
+
+        let targetFrame = interactiveDismissOriginFrame
+        let hasTarget = targetFrame.width > 1 && targetFrame.height > 1
+
+        let originView = delegate?.viewForPhoto?(self, index: currentPageIndex)
+            ?? (currentPageIndex == initPageIndex ? animator.senderViewForAnimation : nil)
+
+        // Wrap full-image snapshot with thumbnail underneath for a crossfade handoff.
+        let animatingView: UIView
+        let fullLayer: UIView
+        let thumbLayer: UIImageView?
+        if hasTarget {
+            let thumb = sk_thumbnailImage(from: originView, browser: self)
+            let thumbMode = (originView as? UIImageView)?.contentMode ?? .scaleAspectFill
+            snapshot.transform = .identity
+            let built = sk_makeDismissTransitionView(
+                fullContent: snapshot,
+                thumbnail: thumb,
+                thumbnailContentMode: thumbMode,
+                frame: snapshot.frame
+            )
+            animatingView = built.container
+            fullLayer = built.fullLayer
+            thumbLayer = built.thumbLayer
+            view.addSubview(animatingView)
+            interactiveDismissSnapshot = animatingView
+
+            let cornerRadius = originView?.layer.cornerRadius ?? 0
+            if cornerRadius > 0 {
+                animatingView.layer.masksToBounds = true
+                animatingView.addCornerRadiusAnimation(0, to: cornerRadius, duration: 0.35)
+            }
+            originView?.alpha = 0
+        } else {
+            animatingView = snapshot
+            fullLayer = snapshot
+            thumbLayer = nil
+        }
+
+        UIView.animate(
+            withDuration: 0.38,
+            delay: 0,
+            usingSpringWithDamping: 0.86,
+            initialSpringVelocity: 0.15,
+            options: [.curveEaseOut],
+            animations: {
+                animatingView.transform = .identity
+                if hasTarget {
+                    animatingView.frame = targetFrame
+                    if thumbLayer != nil {
+                        fullLayer.alpha = 0
+                        thumbLayer?.alpha = 1
+                    }
+                } else {
+                    // No thumbnail target — fade/drop away.
+                    animatingView.alpha = 0
+                    animatingView.center = CGPoint(
+                        x: animatingView.center.x,
+                        y: animatingView.center.y + self.view.bounds.height * 0.2
+                    )
+                }
+                self.view.backgroundColor = .clear
+                self.actionView.alpha = 0
+                self.paginationView.alpha = 0
+                self.toolbar.alpha = 0
+            },
+            completion: { _ in
+                // Keep the morph view on the window so it covers the thumbnail until dismiss finishes.
+                if let window = self.view.window {
+                    let frameInWindow = animatingView.convert(animatingView.bounds, to: window)
+                    window.addSubview(animatingView)
+                    animatingView.frame = frameInWindow
+                }
+                self.interactiveDismissSnapshot = nil
+                self.interactiveDismissMediaView = nil
+                self.isInteractivelyDismissing = false
+
+                let colorToRestore = self.animator.senderViewOriginalBackgroundColor
+                self.dismissPhotoBrowser(animated: false) {
+                    var restored = Set<ObjectIdentifier>()
+                    for view in [
+                        self.delegate?.viewForPhoto?(self, index: self.currentPageIndex),
+                        self.animator.senderViewForAnimation,
+                        originView
+                    ].compactMap({ $0 }) {
+                        let id = ObjectIdentifier(view)
+                        guard restored.insert(id).inserted else { continue }
+                        view.alpha = 1
+                        view.backgroundColor = colorToRestore ?? .clear
+                    }
+                    self.animator.senderViewOriginalBackgroundColor = nil
+                    animatingView.removeFromSuperview()
+                }
+            }
+        )
+    }
+
+    private func cancelInteractiveDismissAnimation(snapshot: UIView) {
+        UIView.animate(
+            withDuration: 0.32,
+            delay: 0,
+            usingSpringWithDamping: 0.82,
+            initialSpringVelocity: 0.2,
+            options: [.curveEaseOut],
+            animations: {
+                snapshot.transform = .identity
+                snapshot.frame = self.interactiveDismissStartFrame
+                self.view.backgroundColor = self.bgColor
+                self.pagingScrollView.alpha = 1
+            },
+            completion: { _ in
+                self.interactiveDismissMediaView?.isHidden = false
+                self.interactiveDismissMediaView = nil
+                snapshot.removeFromSuperview()
+                self.interactiveDismissSnapshot = nil
+                self.isInteractivelyDismissing = false
+                self.setControlsHidden(false, animated: true, permanent: false)
+            }
+        )
+    }
+
+    private func cancelInteractiveDismiss() {
+        interactiveDismissMediaView?.isHidden = false
+        interactiveDismissMediaView = nil
+        interactiveDismissSnapshot?.removeFromSuperview()
+        interactiveDismissSnapshot = nil
+        pagingScrollView.alpha = 1
+        view.backgroundColor = bgColor
+        isInteractivelyDismissing = false
+    }
+
     @objc func actionButtonPressed(ignoreAndShare: Bool) {
         delegate?.willShowActionSheet?(currentPageIndex)
         
@@ -765,10 +875,13 @@ internal extension SKPhotoBrowser {
 // MARK: - Private Function
 private extension SKPhotoBrowser {
     func shouldAllowPanToDismiss(for zoomingScrollView: SKZoomingScrollView) -> Bool {
-        if zoomingScrollView.zoomScale > 1.0 {
+        // Fit scale can be > 1 for small/short images (they are scaled up to fill width).
+        // Only block dismiss when the user has zoomed in past the fit scale.
+        if zoomingScrollView.zoomScale > zoomingScrollView.minimumZoomScale + 0.02 {
             return false
         }
-        if zoomingScrollView.contentOffset.y > 0 {
+        // Tiny epsilon: short images / rubber-banding can leave a fractional offset.
+        if zoomingScrollView.contentOffset.y > 1 {
             return false
         }
         return true
@@ -898,11 +1011,13 @@ extension SKPhotoBrowser: UIViewControllerTransitioningDelegate {
     }
 
     public func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        // Interactive pan already animates the photo back; skip the second dismiss animator.
+        if isInteractivelyDismissing { return nil }
         return SKPhotoBrowserDismissAnimator()
     }
 
     public func interactionControllerForDismissal(using animator: UIViewControllerAnimatedTransitioning) -> UIViewControllerInteractiveTransitioning? {
-        return isInteractivelyDismissing ? dismissInteractionController : nil
+        return nil
     }
 }
 
@@ -914,24 +1029,24 @@ extension SKPhotoBrowser: UIGestureRecognizerDelegate {
               let zoomingScrollView = pagingScrollView.pageDisplayedAtIndex(currentPageIndex) else {
             return true
         }
-        
+
         guard shouldAllowPanToDismiss(for: zoomingScrollView) else { return false }
 
         let velocity = pan.velocity(in: view)
-        let translation = pan.translation(in: view)
-        
-        // Only allow swipe down
-        if translation.y <= 0 { return false }
-
-        // If it's clearly more horizontal than vertical, don't start
+        // Require a clear downward intent (Photos-style pull-to-dismiss).
+        guard velocity.y > 0 else { return false }
         let absVx = abs(velocity.x)
         let absVy = abs(velocity.y)
-        if absVx > absVy * 1.2 { return false }
+        guard absVy > absVx * 1.15 else { return false }
 
         return true
     }
 
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Avoid fighting the paging scroll view once our vertical dismiss pan has begun.
+        if gestureRecognizer === panGesture {
+            return false
+        }
         return true
     }
 }

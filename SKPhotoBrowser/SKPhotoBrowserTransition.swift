@@ -36,6 +36,48 @@ private func calcFinalFrame(imageRatio: CGFloat, in containerSize: CGSize) -> CG
     }
 }
 
+/// Thumbnail image for dismiss morph — prefer the live cell image so it matches what reappears.
+func sk_thumbnailImage(from sender: UIView?, browser: SKPhotoBrowser) -> UIImage? {
+    if let imageView = sender as? UIImageView, let image = imageView.image {
+        return image
+    }
+    if let sender = sender {
+        return browser.getImageFromView(sender)
+    }
+    return browser.animator.senderOriginImage
+}
+
+/// Composite view used when dismissing back onto a thumbnail that is a different crop/image.
+/// Bottom: thumbnail (aspectFill) · Top: full image — crossfade as the frame shrinks.
+func sk_makeDismissTransitionView(
+    fullContent: UIView,
+    thumbnail: UIImage?,
+    thumbnailContentMode: UIView.ContentMode,
+    frame: CGRect
+) -> (container: UIView, fullLayer: UIView, thumbLayer: UIImageView?) {
+    let container = UIView(frame: frame)
+    container.clipsToBounds = true
+    container.backgroundColor = .clear
+
+    var thumbLayer: UIImageView?
+    if let thumbnail = thumbnail {
+        let thumb = UIImageView(image: thumbnail)
+        thumb.contentMode = thumbnailContentMode
+        thumb.clipsToBounds = true
+        thumb.frame = container.bounds
+        thumb.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        thumb.alpha = 0
+        container.addSubview(thumb)
+        thumbLayer = thumb
+    }
+
+    fullContent.frame = container.bounds
+    fullContent.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    container.addSubview(fullContent)
+
+    return (container, fullContent, thumbLayer)
+}
+
 // MARK: - SKPhotoBrowserPresentAnimator
 
 final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTransitioning {
@@ -66,7 +108,8 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
         }
 
         toVC.animator.senderViewOriginalBackgroundColor = sender.backgroundColor
-        sender.backgroundColor = UIColor(white: 0.92, alpha: 1)
+        // Hide the thumbnail while the zooming image covers it (avoids double-image).
+        sender.alpha = 0
 
         toVC.view.alpha = 0
         toVC.view.layoutIfNeeded()
@@ -81,6 +124,11 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
         resizableImageView.frame = startFrame
         resizableImageView.clipsToBounds = true
         resizableImageView.contentMode = photo.contentMode
+        if sender.layer.cornerRadius > 0 {
+            resizableImageView.layer.masksToBounds = true
+            resizableImageView.layer.cornerRadius = sender.layer.cornerRadius
+            resizableImageView.addCornerRadiusAnimation(sender.layer.cornerRadius, to: 0, duration: transitionDuration(using: transitionContext))
+        }
         containerView.addSubview(resizableImageView)
 
         if let page = toVC.pageDisplayedAtIndex(toVC.currentPageIndex) {
@@ -96,6 +144,9 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
             toVC.view.alpha = 1
         }, completion: { finished in
             resizableImageView.removeFromSuperview()
+            // Browser now covers the thumbnail — restore so a later dismiss
+            // to a different page never leaves this cell stuck invisible.
+            sender.alpha = 1
             if let page = toVC.pageDisplayedAtIndex(toVC.currentPageIndex) {
                 // Keep still image hidden when a Live Photo view is already showing.
                 if page.livePhotoView == nil {
@@ -120,13 +171,14 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
         }
 
         let containerView = transitionContext.containerView
+        let duration = transitionDuration(using: transitionContext)
+
         var originView = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex)
-        // Fallback to animator sender view ONLY if we are at the initial page
         if originView == nil && fromVC.currentPageIndex == fromVC.initPageIndex {
             originView = fromVC.animator.senderViewForAnimation
         }
 
-        guard let sender = originView, let zoomingScrollView = fromVC.pageDisplayedAtIndex(fromVC.currentPageIndex) else {
+        guard let zoomingScrollView = fromVC.pageDisplayedAtIndex(fromVC.currentPageIndex) else {
             UIView.animate(withDuration: 0.28, delay: 0, options: .curveEaseOut, animations: {
                 fromVC.view.alpha = 0
             }, completion: { finished in
@@ -135,78 +187,142 @@ final class SKPhotoBrowserDismissAnimator: NSObject, UIViewControllerAnimatedTra
             return
         }
 
-        let finalFrame = calcOriginFrame(sender)
-        let transitionView: UIView
-
-        let frameInContainer = containerView.convert(zoomingScrollView.frame, from: zoomingScrollView.superview)
-        if let snapshot = zoomingScrollView.snapshotView(afterScreenUpdates: false) {
-            transitionView = snapshot
-            transitionView.frame = frameInContainer
-        } else if let image = fromVC.photoAtIndex(fromVC.currentPageIndex).underlyingImage {
-            let imageView = UIImageView(image: image.rotateImageByOrientation())
-            imageView.contentMode = zoomingScrollView.imageView.contentMode
-            imageView.clipsToBounds = true
-            imageView.frame = frameInContainer
-            transitionView = imageView
+        let mediaView: UIView
+        if let livePhotoView = zoomingScrollView.livePhotoView {
+            mediaView = livePhotoView
         } else {
-            transitionContext.completeTransition(true)
+            mediaView = zoomingScrollView.imageView
+        }
+
+        let frameInContainer = containerView.convert(mediaView.bounds, from: mediaView)
+        let photo = fromVC.photoAtIndex(fromVC.currentPageIndex)
+        let isLivePhoto: Bool = {
+            if #available(iOS 9.1, *), photo is SKLivePhoto, zoomingScrollView.livePhotoView != nil {
+                return true
+            }
+            return false
+        }()
+
+        // Prefer the decoded image for still photos (sharper than a snapshot).
+        let fullContent: UIView
+        if !isLivePhoto, let image = photo.underlyingImage {
+            let imageView = UIImageView(image: image.rotateImageByOrientation())
+            imageView.contentMode = mediaView.contentMode
+            imageView.clipsToBounds = true
+            fullContent = imageView
+        } else if let snapshot = mediaView.snapshotView(afterScreenUpdates: false) {
+            fullContent = snapshot
+        } else if let image = photo.underlyingImage {
+            let imageView = UIImageView(image: image.rotateImageByOrientation())
+            imageView.contentMode = mediaView.contentMode
+            imageView.clipsToBounds = true
+            fullContent = imageView
+        } else {
+            UIView.animate(withDuration: 0.28, delay: 0, options: .curveEaseOut, animations: {
+                fromVC.view.alpha = 0
+            }, completion: { finished in
+                transitionContext.completeTransition(finished)
+            })
             return
         }
 
+        let thumb = sk_thumbnailImage(from: originView, browser: fromVC)
+        let thumbMode = (originView as? UIImageView)?.contentMode ?? .scaleAspectFill
+        let built = sk_makeDismissTransitionView(
+            fullContent: fullContent,
+            thumbnail: thumb,
+            thumbnailContentMode: thumbMode,
+            frame: frameInContainer
+        )
+        let transitionView = built.container
+        let fullLayer = built.fullLayer
+        let thumbLayer = built.thumbLayer
+
         containerView.addSubview(transitionView)
         fromVC.view.alpha = 1
-        zoomingScrollView.isHidden = true
+        mediaView.isHidden = true
+        fromVC.pagingScrollView.alpha = 0
 
-        let duration = transitionDuration(using: transitionContext)
-        let targetCornerRadius = sender.layer.cornerRadius
-        if targetCornerRadius > 0 {
-            transitionView.layer.masksToBounds = true
-            transitionView.layer.cornerRadius = 0
-            transitionView.addCornerRadiusAnimation(0, to: targetCornerRadius, duration: duration)
+        // Keep the real thumbnail hidden until the morph lands on it.
+        originView?.alpha = 0
+
+        let targetFrame: CGRect?
+        if let sender = originView {
+            let frame = calcOriginFrame(sender)
+            targetFrame = (frame.width > 1 && frame.height > 1) ? frame : nil
+            let cornerRadius = sender.layer.cornerRadius
+            if cornerRadius > 0 {
+                transitionView.layer.masksToBounds = true
+                transitionView.layer.cornerRadius = 0
+                transitionView.addCornerRadiusAnimation(0, to: cornerRadius, duration: duration)
+            }
+        } else {
+            targetFrame = nil
         }
-
-        let scaleEnd: CGFloat = 0.92
-        transitionView.transform = .identity
 
         var didCompleteTransition = false
         let finishTransition = {
             guard !didCompleteTransition else { return }
             didCompleteTransition = true
             transitionView.removeFromSuperview()
-            transitionView.transform = .identity
-            zoomingScrollView.isHidden = false
-            if let origin = fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex) ?? fromVC.animator.senderViewForAnimation {
-                origin.backgroundColor = fromVC.animator.senderViewOriginalBackgroundColor ?? .clear
+            mediaView.isHidden = false
+            fromVC.pagingScrollView.alpha = 1
+            let restoredColor = fromVC.animator.senderViewOriginalBackgroundColor ?? .clear
+            var restored = Set<ObjectIdentifier>()
+            for origin in [
+                fromVC.delegate?.viewForPhoto?(fromVC, index: fromVC.currentPageIndex),
+                fromVC.animator.senderViewForAnimation,
+                originView
+            ].compactMap({ $0 }) {
+                let id = ObjectIdentifier(origin)
+                guard restored.insert(id).inserted else { continue }
+                origin.alpha = 1
+                origin.backgroundColor = restoredColor
             }
             fromVC.animator.senderViewOriginalBackgroundColor = nil
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
         }
 
-        let maxWait = duration + 0.6
-        DispatchQueue.main.asyncAfter(deadline: .now() + maxWait) { finishTransition() }
-
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.6) { finishTransition() }
         let cleanup = { DispatchQueue.main.async(execute: finishTransition) }
 
-        if SKPhotoBrowserOptions.bounceAnimation {
-            let damping: CGFloat = 0.86
-            UIView.animate(withDuration: duration * 0.75, delay: 0, options: .curveEaseIn, animations: {
+        UIView.animate(
+            withDuration: duration,
+            delay: 0,
+            usingSpringWithDamping: 0.88,
+            initialSpringVelocity: 0.12,
+            options: .curveEaseOut,
+            animations: {
                 fromVC.view.alpha = 0
-            })
-            UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0.2, options: .curveEaseOut, animations: {
-                transitionView.frame = finalFrame
-                transitionView.transform = CGAffineTransform(scaleX: scaleEnd, y: scaleEnd)
-            }, completion: { _ in cleanup() })
-        } else {
-            UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
-                fromVC.view.alpha = 0
-                transitionView.frame = finalFrame
-                transitionView.transform = CGAffineTransform(scaleX: scaleEnd, y: scaleEnd)
-            }, completion: { _ in cleanup() })
-        }
+                fromVC.view.backgroundColor = .clear
+                if let targetFrame = targetFrame {
+                    // Shrink onto the thumbnail while crossfading full → thumb
+                    // so the handoff matches the cell (different crop / resolution).
+                    transitionView.frame = targetFrame
+                    if thumbLayer != nil {
+                        fullLayer.alpha = 0
+                        thumbLayer?.alpha = 1
+                    }
+                } else {
+                    // No thumbnail anchor — still animate a dismiss for normal photos.
+                    let frame = transitionView.frame
+                    let scale: CGFloat = 0.82
+                    let newSize = CGSize(width: frame.width * scale, height: frame.height * scale)
+                    transitionView.frame = CGRect(
+                        x: frame.midX - newSize.width / 2,
+                        y: frame.midY - newSize.height / 2 + containerView.bounds.height * 0.12,
+                        width: newSize.width,
+                        height: newSize.height
+                    )
+                    transitionView.alpha = 0
+                }
+            },
+            completion: { _ in cleanup() }
+        )
     }
 
     func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
-        SKPhotoBrowserOptions.bounceAnimation ? 0.65 : 0.52
+        SKPhotoBrowserOptions.bounceAnimation ? 0.55 : 0.42
     }
 
 }
