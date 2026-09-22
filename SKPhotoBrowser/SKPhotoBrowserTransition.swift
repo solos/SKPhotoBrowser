@@ -78,11 +78,43 @@ func sk_makeDismissTransitionView(
     return (container, fullContent, thumbLayer)
 }
 
+/// Present morph: start as the cell thumbnail (aspectFill), expand while revealing aspectFit.
+func sk_makePresentTransitionView(
+    thumbnail: UIImage,
+    thumbnailContentMode: UIView.ContentMode,
+    endImage: UIImage,
+    endContentMode: UIView.ContentMode,
+    frame: CGRect,
+    cornerRadius: CGFloat
+) -> (container: UIView, thumbLayer: UIImageView, endLayer: UIImageView) {
+    let container = UIView(frame: frame)
+    container.clipsToBounds = true
+    container.backgroundColor = .clear
+    container.layer.cornerRadius = cornerRadius
+
+    let thumbLayer = UIImageView(image: thumbnail)
+    thumbLayer.contentMode = thumbnailContentMode
+    thumbLayer.clipsToBounds = true
+    thumbLayer.frame = container.bounds
+    thumbLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+    let endLayer = UIImageView(image: endImage)
+    endLayer.contentMode = endContentMode
+    endLayer.clipsToBounds = true
+    endLayer.frame = container.bounds
+    endLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    endLayer.alpha = 0
+
+    container.addSubview(thumbLayer)
+    container.addSubview(endLayer)
+    return (container, thumbLayer, endLayer)
+}
+
 // MARK: - SKPhotoBrowserPresentAnimator
 
 final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
-        SKPhotoBrowserOptions.bounceAnimation ? 0.5 : 0.35
+        SKPhotoBrowserOptions.bounceAnimation ? 0.55 : 0.42
     }
 
     func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
@@ -98,7 +130,7 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
         let originView = toVC.delegate?.viewForPhoto?(toVC, index: toVC.currentPageIndex) ?? toVC.animator.senderViewForAnimation
         guard let sender = originView else {
             toVC.view.alpha = 0
-            UIView.animate(withDuration: 0.25, animations: {
+            UIView.animate(withDuration: 0.28, animations: {
                 toVC.view.alpha = 1
             }, completion: { finished in
                 transitionContext.completeTransition(finished)
@@ -115,46 +147,61 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
         toVC.view.layoutIfNeeded()
 
         let photo = toVC.photoAtIndex(toVC.currentPageIndex)
-        let imageFromView = (toVC.animator.senderOriginImage ?? toVC.getImageFromView(sender)).rotateImageByOrientation()
-        let imageRatio = imageFromView.size.width / imageFromView.size.height
+        let thumbImage = (toVC.animator.senderOriginImage ?? toVC.getImageFromView(sender)).rotateImageByOrientation()
+        // Prefer a already-decoded full image when available so the expand lands on sharp pixels.
+        let endImage = (photo.underlyingImage?.rotateImageByOrientation()).flatMap { full in
+            (full.size.width >= thumbImage.size.width || full.size.height >= thumbImage.size.height) ? full : nil
+        } ?? thumbImage
+        let imageRatio = endImage.size.width / endImage.size.height
         let startFrame = calcOriginFrame(sender)
         let finalFrameInBrowser = calcFinalFrame(imageRatio: imageRatio, in: containerView.bounds.size)
 
-        let resizableImageView = UIImageView(image: imageFromView)
-        resizableImageView.frame = startFrame
-        resizableImageView.clipsToBounds = true
-        resizableImageView.contentMode = photo.contentMode
-        if sender.layer.cornerRadius > 0 {
-            resizableImageView.layer.masksToBounds = true
-            resizableImageView.layer.cornerRadius = sender.layer.cornerRadius
-            resizableImageView.addCornerRadiusAnimation(sender.layer.cornerRadius, to: 0, duration: transitionDuration(using: transitionContext))
-        }
-        containerView.addSubview(resizableImageView)
+        let thumbMode = (sender as? UIImageView)?.contentMode ?? .scaleAspectFill
+        let built = sk_makePresentTransitionView(
+            thumbnail: thumbImage,
+            thumbnailContentMode: thumbMode,
+            endImage: endImage,
+            endContentMode: photo.contentMode,
+            frame: startFrame,
+            cornerRadius: sender.layer.cornerRadius
+        )
+        let transitionView = built.container
+        let thumbLayer = built.thumbLayer
+        let endLayer = built.endLayer
+        containerView.addSubview(transitionView)
 
         if let page = toVC.pageDisplayedAtIndex(toVC.currentPageIndex) {
             page.imageView.isHidden = true
+            if #available(iOS 9.1, *) {
+                page.livePhotoView?.isHidden = true
+            }
         }
 
         let duration = transitionDuration(using: transitionContext)
-        let damping: CGFloat = SKPhotoBrowserOptions.bounceAnimation ? 0.8 : 1.0
+        let damping: CGFloat = SKPhotoBrowserOptions.bounceAnimation ? 0.82 : 0.92
 
-        UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0, options: .curveEaseOut, animations: {
+        UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: 0.08, options: .curveEaseOut, animations: {
             toVC.showButtons()
-            resizableImageView.frame = finalFrameInBrowser
+            transitionView.frame = finalFrameInBrowser
+            transitionView.layer.cornerRadius = 0
+            // Expand while revealing aspectFit so the open handoff matches the browser,
+            // even when the cell crop (aspectFill) differs from the full image.
+            thumbLayer.alpha = 0
+            endLayer.alpha = 1
             toVC.view.alpha = 1
-        }, completion: { finished in
-            resizableImageView.removeFromSuperview()
+        }, completion: { _ in
+            transitionView.removeFromSuperview()
             // Browser now covers the thumbnail — restore so a later dismiss
             // to a different page never leaves this cell stuck invisible.
             sender.alpha = 1
             if let page = toVC.pageDisplayedAtIndex(toVC.currentPageIndex) {
-                // Keep still image hidden when a Live Photo view is already showing.
                 if page.livePhotoView == nil {
                     page.imageView.isHidden = false
+                } else if #available(iOS 9.1, *) {
+                    page.livePhotoView?.isHidden = false
                 }
             }
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
-            // Present animation can finish after Live Photo load; start playback once visible.
             toVC.autoPlayLivePhotoIfNeeded(at: toVC.currentPageIndex)
         })
     }
