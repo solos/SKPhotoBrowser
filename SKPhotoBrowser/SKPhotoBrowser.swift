@@ -166,9 +166,7 @@ open class SKPhotoBrowser: UIViewController {
     override open func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(true)
         isViewActive = true
-        if SKPhotoBrowserOptions.autoPlayLivePhoto {
-            autoPlayLivePhotoIfNeeded(at: currentPageIndex)
-        }
+        autoPlayLivePhotoIfNeeded(at: currentPageIndex)
     }
     
     override open var prefersStatusBarHidden: Bool {
@@ -424,6 +422,7 @@ internal extension SKPhotoBrowser {
     }
 
     func autoPlayLivePhotoIfNeeded(at index: Int) {
+        guard SKPhotoBrowserOptions.autoPlayLivePhoto else { return }
         guard let page = pagingScrollView.pageDisplayedAtIndex(index) else { return }
         if #available(iOS 9.1, *) {
             page.playLivePhoto()
@@ -863,11 +862,11 @@ extension SKPhotoBrowser: UIScrollViewDelegate {
         currentPageIndex = min(max(Int(floor(visibleBounds.midX / visibleBounds.width)), 0), photos.count - 1)
         
         if currentPageIndex != previousCurrentPage {
+            if #available(iOS 9.1, *) {
+                pageDisplayedAtIndex(previousCurrentPage)?.stopLivePhoto()
+            }
             delegate?.didShowPhotoAtIndex?(self, index: currentPageIndex)
             paginationView.update(currentPageIndex)
-            if SKPhotoBrowserOptions.autoPlayLivePhoto {
-                autoPlayLivePhotoIfNeeded(at: currentPageIndex)
-            }
         }
     }
     
@@ -876,10 +875,18 @@ extension SKPhotoBrowser: UIScrollViewDelegate {
         
         let currentIndex = pagingScrollView.contentOffset.x / pagingScrollView.frame.size.width
         delegate?.didScrollToIndex?(self, index: Int(currentIndex))
+        autoPlayLivePhotoIfNeeded(at: currentPageIndex)
+    }
+
+    public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate {
+            autoPlayLivePhotoIfNeeded(at: currentPageIndex)
+        }
     }
     
     public func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
         isEndAnimationByToolBar = true
+        autoPlayLivePhotoIfNeeded(at: currentPageIndex)
     }
 }
 

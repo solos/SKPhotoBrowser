@@ -15,13 +15,27 @@ open class SKZoomingScrollView: UIScrollView {
     var photo: SKPhotoProtocol! {
         didSet {
             imageView.image = nil
-            if photo != nil && photo.underlyingImage != nil {
+            guard let photo = photo else { return }
+
+            // Live Photo: even with a still placeholder, keep loading until PHLivePhoto is ready.
+            if #available(iOS 9.1, *), let live = photo as? SKLivePhoto {
+                displayImage(complete: live.livePhoto != nil)
+                return
+            }
+
+            if photo.underlyingImage != nil {
+                // Remote photos may start with a thumbnail holder; keep loading until the URL resolves.
+                if let remote = photo as? SKPhoto,
+                   let url = remote.photoURL,
+                   !url.isEmpty,
+                   !remote.remoteImageLoaded {
+                    displayImage(complete: false)
+                    return
+                }
                 displayImage(complete: true)
                 return
             }
-            if photo != nil {
-                displayImage(complete: false)
-            }
+            displayImage(complete: false)
         }
     }
     
@@ -215,12 +229,26 @@ open class SKZoomingScrollView: UIScrollView {
         contentSize = frameSize
         setMaxMinZoomScalesForCurrentBounds()
         setNeedsLayout()
+
+        // Auto-play once the Live Photo is on screen (covers async load after viewDidAppear).
+        if SKPhotoBrowserOptions.autoPlayLivePhoto,
+           let browser = browser,
+           browser.pageDisplayedAtIndex(browser.currentPageIndex) === self {
+            playLivePhoto()
+        }
     }
 
     /// Start Live Photo playback (full loop including audio).
     @available(iOS 9.1, *)
     open func playLivePhoto() {
-        (livePhotoView as? PHLivePhotoView)?.startPlayback(with: .full)
+        guard let lpv = livePhotoView as? PHLivePhotoView, lpv.livePhoto != nil else { return }
+        // startPlayback is unreliable before the view is in a window and laid out
+        // (e.g. during present transition while browser.view is still fading in).
+        DispatchQueue.main.async { [weak lpv] in
+            guard let lpv = lpv, lpv.livePhoto != nil else { return }
+            guard lpv.window != nil else { return }
+            lpv.startPlayback(with: .full)
+        }
     }
 
     /// Stop Live Photo playback.

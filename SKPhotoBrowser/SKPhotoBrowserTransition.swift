@@ -60,6 +60,7 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
                 toVC.view.alpha = 1
             }, completion: { finished in
                 transitionContext.completeTransition(finished)
+                toVC.autoPlayLivePhotoIfNeeded(at: toVC.currentPageIndex)
             })
             return
         }
@@ -95,8 +96,15 @@ final class SKPhotoBrowserPresentAnimator: NSObject, UIViewControllerAnimatedTra
             toVC.view.alpha = 1
         }, completion: { finished in
             resizableImageView.removeFromSuperview()
-            toVC.pageDisplayedAtIndex(toVC.currentPageIndex)?.imageView.isHidden = false
+            if let page = toVC.pageDisplayedAtIndex(toVC.currentPageIndex) {
+                // Keep still image hidden when a Live Photo view is already showing.
+                if page.livePhotoView == nil {
+                    page.imageView.isHidden = false
+                }
+            }
             transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
+            // Present animation can finish after Live Photo load; start playback once visible.
+            toVC.autoPlayLivePhotoIfNeeded(at: toVC.currentPageIndex)
         })
     }
 }

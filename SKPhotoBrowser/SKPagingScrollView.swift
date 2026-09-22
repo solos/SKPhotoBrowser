@@ -53,14 +53,14 @@ class SKPagingScrollView: UIScrollView {
             // Previous
             if pageIndex > 0 {
                 let previousPhoto = browser.photos[pageIndex - 1]
-                if previousPhoto.underlyingImage == nil {
+                if needsUnderlyingImageLoad(previousPhoto) {
                     previousPhoto.loadUnderlyingImageAndNotify()
                 }
             }
             // Next
             if pageIndex < numberOfPhotos - 1 {
                 let nextPhoto = browser.photos[pageIndex + 1]
-                if nextPhoto.underlyingImage == nil {
+                if needsUnderlyingImageLoad(nextPhoto) {
                     nextPhoto.loadUnderlyingImageAndNotify()
                 }
             }
@@ -219,6 +219,17 @@ class SKPagingScrollView: UIScrollView {
 }
 
 private extension SKPagingScrollView {
+    func needsUnderlyingImageLoad(_ photo: SKPhotoProtocol) -> Bool {
+        if photo.underlyingImage == nil { return true }
+        if let remote = photo as? SKPhoto,
+           let url = remote.photoURL,
+           !url.isEmpty,
+           !remote.remoteImageLoaded {
+            return true
+        }
+        return false
+    }
+
     func frameForPageAtIndex(_ index: Int) -> CGRect {
         var pageFrame = bounds
         pageFrame.size.width -= (2 * sideMargin)

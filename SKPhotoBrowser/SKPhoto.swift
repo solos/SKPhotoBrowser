@@ -25,6 +25,9 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
     open var contentMode: UIView.ContentMode = .scaleAspectFill
     open var shouldCachePhotoURLImage: Bool = false
     open var photoURL: String!
+    /// True after a remote URL (or its cache) has been resolved to `underlyingImage`.
+    /// Used so a thumbnail holder does not block the first load, but later reuse does not re-download.
+    open var remoteImageLoaded: Bool = false
 
     public override init() {
         super.init()
@@ -57,18 +60,25 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
         if SKCache.sharedCache.imageCache is SKRequestResponseCacheable {
             if let url = URL(string: photoURL), let img = SKCache.sharedCache.imageForRequest(URLRequest(url: url)) {
                 underlyingImage = img
+                remoteImageLoaded = true
             }
         } else if isGIFURL(photoURL),
                   let data = SKCache.sharedCache.dataForKey(photoURL),
                   let image = UIImage.gif(data: data) {
             underlyingImage = image
+            remoteImageLoaded = true
         } else if let img = SKCache.sharedCache.imageForKey(photoURL) {
             underlyingImage = img
+            remoteImageLoaded = true
         }
     }
     
     open func loadUnderlyingImageAndNotify() {
         guard let photoURL = photoURL, let url = URL(string: photoURL) else { return }
+        if remoteImageLoaded, underlyingImage != nil {
+            loadUnderlyingImageComplete()
+            return
+        }
 
         let request = URLRequest(url: url)
         let session = URLSession(configuration: SKPhotoBrowserOptions.sessionConfiguration)
@@ -97,6 +107,7 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
                 }
                 DispatchQueue.main.async {
                     self.underlyingImage = image
+                    self.remoteImageLoaded = true
                     self.loadUnderlyingImageComplete()
                 }
             } else {
