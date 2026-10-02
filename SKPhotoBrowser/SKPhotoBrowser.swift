@@ -477,6 +477,16 @@ internal extension SKPhotoBrowser {
             let save = UIAlertAction(title: "保存", style: .default, handler: {
                 [weak self] ACTION in
                 guard let self = self else { return }
+                if #available(iOS 9.1, *), let live = photo as? SKLivePhoto {
+                    live.saveToPhotoLibrary { success, error in
+                        if let error = error {
+                            print(error)
+                        } else if !success {
+                            print("Failed to save Live Photo")
+                        }
+                    }
+                    return
+                }
                 let p = photo as? SKPhoto
                 if p != nil {
                     let url = p!.photoURL
