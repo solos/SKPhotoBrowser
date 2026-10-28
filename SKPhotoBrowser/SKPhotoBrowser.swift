@@ -812,6 +812,7 @@ internal extension SKPhotoBrowser {
                 self.interactiveDismissSnapshot = nil
                 self.isInteractivelyDismissing = false
                 self.setControlsHidden(false, animated: true, permanent: false)
+                self.autoPlayLivePhotoIfNeeded(at: self.currentPageIndex)
             }
         )
     }
@@ -824,6 +825,7 @@ internal extension SKPhotoBrowser {
         pagingScrollView.alpha = 1
         view.backgroundColor = bgColor
         isInteractivelyDismissing = false
+        autoPlayLivePhotoIfNeeded(at: currentPageIndex)
     }
 
     @objc func actionButtonPressed(ignoreAndShare: Bool) {

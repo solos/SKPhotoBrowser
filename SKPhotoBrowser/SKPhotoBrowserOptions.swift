@@ -40,7 +40,9 @@ public struct SKPhotoBrowserOptions {
     public static var swapCloseAndDeleteButtons: Bool = false
     public static var disableVerticalSwipe: Bool = false
 
-    /// When true, Live Photos automatically start playback when they become the current page.
+    /// When true, Live Photos automatically start playing (with sound) when
+    /// they become the current page, and loop until the page changes or the
+    /// browser is dismissed.
     /// Default: true
     public static var autoPlayLivePhoto: Bool = true
 

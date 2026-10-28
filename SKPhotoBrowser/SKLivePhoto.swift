@@ -85,7 +85,7 @@ open class SKLivePhoto: NSObject, SKPhotoProtocol {
             options: liveOptions
         ) { [weak self] livePhoto, info in
             guard let self = self else { return }
-            let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+            let isDegraded = (info?[PHLivePhotoInfoIsDegradedKey] as? Bool) ?? false
             // Skip intermediate degraded previews; wait for the final result.
             if isDegraded { return }
             if let livePhoto = livePhoto {

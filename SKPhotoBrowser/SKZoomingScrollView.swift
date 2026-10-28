@@ -44,7 +44,13 @@ open class SKZoomingScrollView: UIScrollView {
     fileprivate(set) var imageView: SKDetectingImageView!
     fileprivate var tapView: SKDetectingView!
     fileprivate var indicatorView: SKIndicatorView!
-    fileprivate(set) var livePhotoView: UIView?  // PHLivePhotoView on iOS 9.1+
+    /// Sibling of imageView, never the view returned by viewForZooming.
+    /// UIScrollView applies a transform to the zoom view; PHLivePhotoView will not play under that transform.
+    fileprivate(set) var livePhotoView: UIView?
+    /// Whether the currently displayed Live Photo should be playing.
+    /// Set by playLivePhoto()/stopLivePhoto(); used to loop playback and retry
+    /// when the view becomes visible (e.g. after the present transition).
+    var wantsLivePhotoPlayback = false
     
     required public init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
@@ -101,7 +107,9 @@ open class SKZoomingScrollView: UIScrollView {
         super.layoutSubviews()
         
         let boundsSize = bounds.size
-        let activeView: UIView = livePhotoView ?? imageView
+        // Always center the image view. The Live Photo view copies its frame afterwards
+        // so it is positioned the same way without becoming the zooming view.
+        let activeView: UIView = imageView
         var frameToCenter = activeView.frame
         
         // horizon
@@ -121,6 +129,7 @@ open class SKZoomingScrollView: UIScrollView {
         if !activeView.frame.equalTo(frameToCenter) {
             activeView.frame = frameToCenter
         }
+        syncLivePhotoFrame()
     }
     
     open func setMaxMinZoomScalesForCurrentBounds() {
@@ -128,7 +137,7 @@ open class SKZoomingScrollView: UIScrollView {
         minimumZoomScale = 1
         zoomScale = 1
         
-        let activeView: UIView = livePhotoView ?? imageView
+        let activeView: UIView = imageView
         guard activeView.frame.size != .zero else {
             return
         }
@@ -190,10 +199,34 @@ open class SKZoomingScrollView: UIScrollView {
         }
         if #available(iOS 9.1, *) {
             stopLivePhoto()
+            if let lpv = livePhotoView as? PHLivePhotoView {
+                lpv.delegate = nil
+                lpv.livePhoto = nil
+            }
         }
         livePhotoView?.removeFromSuperview()
         livePhotoView = nil
         imageView.isHidden = false
+    }
+
+    /// Match the still image's on-screen frame. Frame (not a zoom transform) keeps playback working.
+    private func syncLivePhotoFrame() {
+        guard let livePhotoView = livePhotoView else { return }
+        let target = imageView.frame
+        guard target.width > 0, target.height > 0, !livePhotoView.frame.equalTo(target) else { return }
+        livePhotoView.frame = target
+    }
+    
+    open override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // startPlayback silently fails when the view is not yet in a window
+        // (e.g. it was requested during the present transition). Retry as soon
+        // as the page actually joins the window hierarchy.
+        guard window != nil else { return }
+        guard SKPhotoBrowserOptions.autoPlayLivePhoto, wantsLivePhotoPlayback else { return }
+        if #available(iOS 9.1, *) {
+            playLivePhoto()
+        }
     }
     
     @available(iOS 9.1, *)
@@ -221,13 +254,16 @@ open class SKZoomingScrollView: UIScrollView {
             insertSubview(lpv, aboveSubview: imageView)
             livePhotoView = lpv
         } else {
-            livePhotoView?.frame = livePhotoFrame
             livePhotoView?.contentMode = contentMode
         }
-        (livePhotoView as? PHLivePhotoView)?.livePhoto = livePhoto
+        if let lpv = livePhotoView as? PHLivePhotoView {
+            lpv.delegate = self
+            lpv.livePhoto = livePhoto
+        }
 
         contentSize = frameSize
         setMaxMinZoomScalesForCurrentBounds()
+        syncLivePhotoFrame()
         setNeedsLayout()
 
         // Auto-play once the Live Photo is on screen (covers async load after viewDidAppear).
@@ -238,15 +274,18 @@ open class SKZoomingScrollView: UIScrollView {
         }
     }
 
-    /// Start Live Photo playback (full loop including audio).
+    /// Start Live Photo playback (with audio) and keep it looping.
     @available(iOS 9.1, *)
     open func playLivePhoto() {
+        wantsLivePhotoPlayback = true
         guard let lpv = livePhotoView as? PHLivePhotoView, lpv.livePhoto != nil else { return }
         // startPlayback is unreliable before the view is in a window and laid out
         // (e.g. during present transition while browser.view is still fading in).
-        DispatchQueue.main.async { [weak lpv] in
-            guard let lpv = lpv, lpv.livePhoto != nil else { return }
-            guard lpv.window != nil else { return }
+        // didMoveToWindow retries in that case.
+        DispatchQueue.main.async { [weak self, weak lpv] in
+            guard let self = self, let lpv = lpv else { return }
+            guard self.wantsLivePhotoPlayback, lpv.livePhoto != nil else { return }
+            guard lpv.window != nil, !lpv.isHidden else { return }
             lpv.startPlayback(with: .full)
         }
     }
@@ -254,6 +293,7 @@ open class SKZoomingScrollView: UIScrollView {
     /// Stop Live Photo playback.
     @available(iOS 9.1, *)
     open func stopLivePhoto() {
+        wantsLivePhotoPlayback = false
         (livePhotoView as? PHLivePhotoView)?.stopPlayback()
     }
 
@@ -261,6 +301,9 @@ open class SKZoomingScrollView: UIScrollView {
         // image
         imageView.image = image
         imageView.contentMode = photo.contentMode
+        if livePhotoView == nil {
+            imageView.isHidden = false
+        }
         
         var imageViewFrame: CGRect = .zero
         imageViewFrame.origin = .zero
@@ -344,7 +387,8 @@ open class SKZoomingScrollView: UIScrollView {
 
 extension SKZoomingScrollView: UIScrollViewDelegate {
     public func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        return livePhotoView ?? imageView
+        // PHLivePhotoView must not be the zoom view: UIScrollView's transform stops playback.
+        return imageView
     }
     
     public func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
@@ -352,6 +396,7 @@ extension SKZoomingScrollView: UIScrollViewDelegate {
     }
     
     public func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        syncLivePhotoFrame()
         setNeedsLayout()
         layoutIfNeeded()
     }
@@ -399,6 +444,29 @@ extension SKZoomingScrollView: SKDetectingImageViewDelegate {
     
     func handleImageViewDoubleTap(_ touchPoint: CGPoint) {
         handleDoubleTap(touchPoint)
+    }
+}
+
+// MARK: - PHLivePhotoViewDelegate
+
+@available(iOS 9.1, *)
+extension SKZoomingScrollView: PHLivePhotoViewDelegate {
+    /// Playback reaches the end (or was stopped). Restart it while the page
+    /// still wants playback so the Live Photo loops like the Photos app does
+    /// while pressed. This also recovers from a startPlayback that ended
+    /// immediately (e.g. it was triggered too early during a transition).
+    public func livePhotoView(_ livePhotoView: PHLivePhotoView, didEndPlaybackWith playbackStyle: PHLivePhotoViewPlaybackStyle) {
+        guard SKPhotoBrowserOptions.autoPlayLivePhoto,
+              wantsLivePhotoPlayback,
+              livePhotoView.livePhoto != nil,
+              livePhotoView.window != nil,
+              !livePhotoView.isHidden else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak livePhotoView] in
+            guard let self = self, let lpv = livePhotoView else { return }
+            guard self.wantsLivePhotoPlayback, lpv.livePhoto != nil,
+                  lpv.window != nil, !lpv.isHidden else { return }
+            lpv.startPlayback(with: .full)
+        }
     }
 }
 
